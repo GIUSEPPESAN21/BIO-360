@@ -229,7 +229,7 @@ st.title("BIOETHICARE 360 🏥")
 with st.expander("Autores"):
     st.markdown("""
     - **Joseph Javier Sánchez Acuña**: Ingeniero Industrial, Experto en IA y tecnologías de vanguardia.
-    - **Anderson Díaz Pérez**: Doctor en Bioética, Doctor en Salud Pública, Magíster en Ciencias Básicas Biomédicas (Énfasis en Inmunología), Especialista en Inteligencia Artificial.
+    - **Anderson Díaz Pérez**: Doctor en Bioética, Doctor en Salud Pública, Magíster en Ciencias Básicas Biomédicas, Especialista en Inteligencia Artificial.
     """)
 st.markdown("---")
 
