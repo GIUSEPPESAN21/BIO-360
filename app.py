@@ -1,5 +1,5 @@
 # app.py - BIOETHICARE 360 - Versión Profesional Final
-# Autor: Anderson Díaz Pérez & AI Colaborativa
+# Autor: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
 # VERSIÓN CONSOLIDADA CON UI PROFESIONAL, ANÁLISIS MULTIPERSPECTIVA Y MEJORAS INTEGRADAS
 
 # --- 1. Importaciones ---
@@ -226,7 +226,12 @@ def llamar_gemini(prompt, api_key):
 
 # --- 7. Interfaz de Usuario ---
 st.title("BIOETHICARE 360 🏥")
-st.markdown("#### Plataforma de Análisis Deliberativo y Soporte a la Decisión Bioética con IA.")
+# CAMBIO: Título de autores añadido en un menú desplegable
+with st.expander("Autores"):
+    st.markdown("""
+    - **Joseph Javier Sánchez Acuña**: Ingeniero Industrial, Experto en IA y tecnologías de vanguardia.
+    - **Anderson Díaz Pérez**: Doctor en Bioética, Doctor en Salud Pública, Magíster en Ciencias Básicas Biomédicas (Énfasis en Inmunología), Especialista en Inteligencia Artificial.
+    """)
 st.markdown("---")
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
