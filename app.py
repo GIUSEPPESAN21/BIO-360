@@ -1,5 +1,5 @@
-# app.py - BIOETHICARE 360 - Versión Profesional Final
-# Autor: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
+# app.py - BIOETHICARE 360 - Versión Profesional Definitiva
+# Autores: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
 # VERSIÓN CONSOLIDADA CON UI PROFESIONAL, ANÁLISIS MULTIPERSPECTIVA Y MEJORAS INTEGRADAS
 
 # --- 1. Importaciones ---
@@ -226,7 +226,6 @@ def llamar_gemini(prompt, api_key):
 
 # --- 7. Interfaz de Usuario ---
 st.title("BIOETHICARE 360 🏥")
-# CAMBIO: Título de autores añadido en un menú desplegable
 with st.expander("Autores"):
     st.markdown("""
     - **Joseph Javier Sánchez Acuña**: Ingeniero Industrial, Experto en IA y tecnologías de vanguardia.
