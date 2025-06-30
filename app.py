@@ -1,6 +1,6 @@
 # app.py - BIOETHICARE 360 - Versión Profesional Definitiva
 # Autores: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
-# VERSIÓN CON ANÁLISIS DE HISTORIA CLÍNICA, UI MEJORADA Y ARQUITECTURA ROBUSTA
+# VERSIÓN CON CORRECCIÓN DE ERRORES DE KEY, ANÁLISIS DE HISTORIA CLÍNICA Y ARQUITECTURA ROBUSTA
 
 # --- 1. Importaciones ---
 import os
@@ -135,8 +135,8 @@ def generar_reporte_completo(caso, dilema_sugerido, chat_history, chart_jsons):
         },
         "Análisis Deliberativo (IA)": "",
         "Historial del Chat de Deliberación": chat_history,
-        "radar_chart_json": chart_jsons.get('radar_comparativo_json'), # Almacenar JSON del gráfico
-        "stats_chart_json": chart_jsons.get('estadisticas_json'),   # Almacenar JSON del gráfico
+        "radar_chart_json": chart_jsons.get('radar_comparativo_json'),
+        "stats_chart_json": chart_jsons.get('estadisticas_json'),
     }
 
 def generar_visualizaciones_avanzadas(caso):
@@ -162,7 +162,7 @@ def generar_visualizaciones_avanzadas(caso):
     }
 
 def crear_reporte_pdf_completo(data, filename):
-    """Genera el reporte PDF. Los gráficos ya no se incrustan para evitar errores."""
+    """Genera el reporte PDF. Los gráficos no se incrustan para evitar errores con Kaleido."""
     doc = SimpleDocTemplate(filename, pagesize=letter, topMargin=inch/2, bottomMargin=inch/2)
     styles = getSampleStyleSheet()
     story = []
@@ -235,7 +235,8 @@ if not GEMINI_API_KEY:
 
 tab_analisis, tab_chatbot, tab_consultar = st.tabs(["**Análisis de Caso**", "**Asistente de Bioética (Chatbot)**", "**Consultar Casos Anteriores**"])
 
-def display_case_details(report_data, container=st):
+def display_case_details(report_data, key_prefix, container=st):
+    """Muestra el dashboard del caso con la UI avanzada y llaves únicas."""
     with container.container(border=True):
         case_id = report_data.get('ID del Caso', 'N/A')
         st.subheader(f"Dashboard del Caso: `{case_id}`", anchor=False)
@@ -247,8 +248,8 @@ def display_case_details(report_data, container=st):
             st.markdown("##### Análisis Gráfico Avanzado")
             c1, c2 = st.columns(2)
             try:
-                c1.plotly_chart(pio.from_json(radar_json), use_container_width=True, key=f"radar_{case_id}")
-                c2.plotly_chart(pio.from_json(stats_json), use_container_width=True, key=f"stats_{case_id}")
+                c1.plotly_chart(pio.from_json(radar_json), use_container_width=True, key=f"{key_prefix}_radar_{case_id}")
+                c2.plotly_chart(pio.from_json(stats_json), use_container_width=True, key=f"{key_prefix}_stats_{case_id}")
             except Exception as e:
                 st.warning(f"No se pudieron cargar los gráficos para el caso {case_id}. Error: {e}")
             st.markdown("---")
@@ -267,8 +268,8 @@ def display_case_details(report_data, container=st):
             col_b.markdown(f"**Dilema Sugerido por IA:** {report_data.get('Dilema Sugerido por IA')}")
         
         with st.expander("Ver Detalles Completos, Ponderación y Chat"):
-            st.text_area("Descripción:", value=report_data.get('Descripción Detallada del Caso',''), height=150, disabled=True, key=f"desc_{case_id}")
-            st.text_area("Contexto Sociocultural:", value=report_data.get('Contexto Sociocultural y Familiar',''), height=100, disabled=True, key=f"context_{case_id}")
+            st.text_area("Descripción:", value=report_data.get('Descripción Detallada del Caso',''), height=150, disabled=True, key=f"{key_prefix}_desc_{case_id}")
+            st.text_area("Contexto Sociocultural:", value=report_data.get('Contexto Sociocultural y Familiar',''), height=100, disabled=True, key=f"{key_prefix}_context_{case_id}")
             if report_data.get("Análisis IA de Historia Clínica"):
                 st.markdown("**Análisis IA de Historia Clínica (Elementos Clave)**")
                 st.info(report_data["Análisis IA de Historia Clínica"])
@@ -277,10 +278,10 @@ def display_case_details(report_data, container=st):
             for nombre, valores in report_data.get("AnalisisMultiperspectiva", {}).items():
                 st.markdown(f"**{nombre}**")
                 p_cols = st.columns(4)
-                p_cols[0].metric("Autonomía", f"{valores.get('autonomia', 0)}/5")
-                p_cols[1].metric("Beneficencia", f"{valores.get('beneficencia', 0)}/5")
-                p_cols[2].metric("No Maleficencia", f"{valores.get('no_maleficencia', 0)}/5")
-                p_cols[3].metric("Justicia", f"{valores.get('justicia', 0)}/5")
+                p_cols[0].metric("Autonomía", f"{valores.get('autonomia', 0)}/5", key=f"{key_prefix}_metric_aut_{nombre}_{case_id}")
+                p_cols[1].metric("Beneficencia", f"{valores.get('beneficencia', 0)}/5", key=f"{key_prefix}_metric_ben_{nombre}_{case_id}")
+                p_cols[2].metric("No Maleficencia", f"{valores.get('no_maleficencia', 0)}/5", key=f"{key_prefix}_metric_nom_{nombre}_{case_id}")
+                p_cols[3].metric("Justicia", f"{valores.get('justicia', 0)}/5", key=f"{key_prefix}_metric_jus_{nombre}_{case_id}")
             
             st.markdown("**Historial del Chat**")
             for msg in report_data.get("Historial del Chat de Deliberación", []):
@@ -390,7 +391,7 @@ with tab_analisis:
         with open(pdf_path, "rb") as pdf_file:
             a2.download_button("📄 Descargar Reporte PDF", pdf_file, os.path.basename(pdf_path), "application/pdf", use_container_width=True)
         
-        display_case_details(st.session_state.reporte)
+        display_case_details(st.session_state.reporte, key_prefix="active")
 
 with tab_chatbot:
     st.header("🤖 Asistente de Bioética con Gemini", anchor=False)
@@ -433,6 +434,6 @@ with tab_consultar:
             else:
                 id_sel = st.selectbox("Selecciona un caso para ver sus detalles", options=list(casos.keys()))
                 if id_sel: 
-                    display_case_details(casos[id_sel])
+                    display_case_details(casos[id_sel], key_prefix="consult")
         except Exception as e:
             st.error(f"Ocurrió un error al consultar los casos desde Firebase: {e}")
