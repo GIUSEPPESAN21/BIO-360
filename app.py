@@ -432,7 +432,7 @@ with tab_consultar:
             casos = {caso.id: caso.to_dict() for caso in casos_ref}
             if not casos: st.info("No hay casos guardados.")
             else:
-                id_sel = st.selectbox("Selecciona un caso para ver sus detalles", options=list(casos.keys()))
+                id_sel = st.selectbox("Selecciona un caso para ver sus detalles", options=list(casos.keys()), key="case_selector_consultar")
                 if id_sel: 
                     display_case_details(casos[id_sel], key_prefix="consult")
         except Exception as e:
