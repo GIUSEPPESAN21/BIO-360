@@ -274,21 +274,41 @@ def display_case_details(report_data, key_prefix, container=st):
                 st.markdown("**Análisis IA de Historia Clínica (Elementos Clave)**")
                 st.info(report_data["Análisis IA de Historia Clínica"])
             
-            # --- SECCIÓN CORREGIDA (v2) ---
-            # El error 'TypeError' se debe a caracteres inválidos (espacios, '/') en la llave del widget.
-            # La solución es "sanitizar" el nombre de la perspectiva para crear una llave limpia y válida.
+            # --- SECCIÓN CORREGIDA (v3 - Definitiva) ---
+            # El error 'TypeError' era persistente y probablemente causado por una combinación de factores
+            # en la creación de llaves de widgets y el manejo de tipos de datos durante el re-renderizado.
+            # Esta versión es "hiper-defensiva" para garantizar la estabilidad:
+            # 1. Verifica que los datos a iterar (diccionarios) sean válidos.
+            # 2. "Sanitiza" TODAS las partes dinámicas de la llave (key) para eliminar caracteres especiales.
+            # 3. Convierte explícitamente el valor final de la métrica a entero.
             st.markdown("**Ponderación por Perspectiva (escala 0-5)**")
-            for nombre, valores in report_data.get("AnalisisMultiperspectiva", {}).items():
-                st.markdown(f"**{nombre}**")
-                p_cols = st.columns(4)
-                
-                # Sanitizar el 'nombre' para que sea una llave válida (ej: "Familia/Paciente" -> "FamiliaPaciente")
-                nombre_sanitized = "".join(filter(str.isalnum, nombre))
+            multiperspectiva = report_data.get("AnalisisMultiperspectiva", {})
 
-                p_cols[0].metric("Autonomía", valores.get('autonomia', 0), key=f"{key_prefix}_metric_aut_{nombre_sanitized}_{case_id}")
-                p_cols[1].metric("Beneficencia", valores.get('beneficencia', 0), key=f"{key_prefix}_metric_ben_{nombre_sanitized}_{case_id}")
-                p_cols[2].metric("No Maleficencia", valores.get('no_maleficencia', 0), key=f"{key_prefix}_metric_nom_{nombre_sanitized}_{case_id}")
-                p_cols[3].metric("Justicia", valores.get('justicia', 0), key=f"{key_prefix}_metric_jus_{nombre_sanitized}_{case_id}")
+            if isinstance(multiperspectiva, dict):
+                for nombre, valores in multiperspectiva.items():
+                    if not isinstance(valores, dict):
+                        st.warning(f"Datos de perspectiva para '{nombre}' no son válidos. Saltando.")
+                        continue
+
+                    st.markdown(f"**{nombre}**")
+                    p_cols = st.columns(4)
+                    
+                    # Sanitizar todas las partes de la llave para máxima seguridad
+                    nombre_sanitized = "".join(filter(str.isalnum, str(nombre)))
+                    case_id_sanitized = "".join(filter(str.isalnum, str(case_id)))
+
+                    # Obtener y convertir de forma segura los valores
+                    autonomia_val = int(valores.get('autonomia', 0))
+                    beneficencia_val = int(valores.get('beneficencia', 0))
+                    no_maleficencia_val = int(valores.get('no_maleficencia', 0))
+                    justicia_val = int(valores.get('justicia', 0))
+
+                    p_cols[0].metric("Autonomía", autonomia_val, key=f"{key_prefix}_metric_aut_{nombre_sanitized}_{case_id_sanitized}")
+                    p_cols[1].metric("Beneficencia", beneficencia_val, key=f"{key_prefix}_metric_ben_{nombre_sanitized}_{case_id_sanitized}")
+                    p_cols[2].metric("No Maleficencia", no_maleficencia_val, key=f"{key_prefix}_metric_nom_{nombre_sanitized}_{case_id_sanitized}")
+                    p_cols[3].metric("Justicia", justicia_val, key=f"{key_prefix}_metric_jus_{nombre_sanitized}_{case_id_sanitized}")
+            else:
+                st.warning("No se encontraron datos de 'AnalisisMultiperspectiva' o el formato es incorrecto.")
             # --- FIN DE LA SECCIÓN CORREGIDA ---
             
             st.markdown("**Historial del Chat**")
