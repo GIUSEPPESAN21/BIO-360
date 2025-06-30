@@ -54,12 +54,13 @@ def initialize_firebase():
                 try:
                     creds_dict = json.loads(creds_value)
                 except json.JSONDecodeError:
-                    st.error("❌ Error: Las credenciales de Firebase no son un JSON válido.", icon="❌")
+                    st.error("❌ Error: Las credenciales de Firebase no son un JSON válido. Asegúrate de que el contenido sea un JSON válido.", icon="❌")
                     return None
             elif isinstance(creds_value, dict):
                 creds_dict = creds_value
             else:
-                st.error("❌ Error: Formato de credenciales de Firebase no reconocido.", icon="❌")
+                # Este es el camino de error específico de la imagen
+                st.error(f"❌ Error: Formato de credenciales de Firebase no reconocido. Tipo recibido: {type(creds_value)}. Asegúrate de que sea una cadena JSON o un diccionario.", icon="❌")
                 return None
 
             cred = credentials.Certificate(creds_dict)
@@ -68,10 +69,10 @@ def initialize_firebase():
             st.success("🔌 Conexión con Firebase establecida.", icon="🔌")
             return firestore.client()
         else:
-            st.warning("⚠️ Credenciales de Firebase no encontradas.", icon="⚠️")
+            st.warning("⚠️ Credenciales de Firebase no encontradas en `st.secrets`. Asegúrate de que la clave 'firebase_credentials' esté configurada.", icon="⚠️")
             return None
     except Exception as e:
-        st.error(f"❌ Error al conectar con Firebase: {e}", icon="❌")
+        st.error(f"❌ Error general al conectar con Firebase: {e}", icon="❌")
         return None
 
 db = initialize_firebase()
