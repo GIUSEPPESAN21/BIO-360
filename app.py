@@ -84,14 +84,14 @@ def initialize_firebase():
             cred = credentials.Certificate(creds_dict)
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
-            st.success("🔌 Conexión con Firebase establecida.", icon="🔌")
+            st.success("Conexión con Firebase establecida.", icon="🔌")
             return firestore.client()
         else:
-            st.warning("⚠️ Credenciales de Firebase no encontradas.", icon="⚠️")
+            st.warning("Credenciales de Firebase no encontradas.", icon="⚠️")
             return None
     except Exception as e:
         log_error("Error al conectar con Firebase", e)
-        st.error(f"❌ Error al conectar con Firebase: {e}", icon="❌")
+        st.error(f"Error al conectar con Firebase: {e}", icon="❌")
         return None
 
 db = initialize_firebase()
