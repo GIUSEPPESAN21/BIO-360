@@ -330,9 +330,6 @@ def display_case_details(report_data, key_prefix):
                         
                         for i, (label, m_key) in enumerate(zip(metric_labels, metric_keys)):
                             value = safe_int(valores.get(m_key, 0))
-                            # --- CORRECCIÓN FINAL Y DEFINITIVA ---
-                            # Se elimina el argumento 'key' de st.metric, ya que la versión de Streamlit
-                            # en el entorno de despliegue no lo soporta. Este era el error real.
                             p_cols[i].metric(label, value)
             
             # Historial del chat
@@ -491,7 +488,28 @@ def main():
         else:
             st.info(f"Chatbot activo para el caso: **{st.session_state.case_id}**.")
             
-            if prompt := st.chat_input("Escribe tu pregunta..."):
+            # --- PREGUNTAS GUIADAS REINTEGRADAS ---
+            st.subheader("Preguntas Guiadas para Deliberación", anchor=False)
+            preguntas = [
+                "¿Cuál es el conflicto principal entre los principios bioéticos en este caso?",
+                "Desde un punto de vista legal, ¿qué normativas o sentencias son relevantes aquí?",
+                "¿Qué estrategias de mediación se podrían usar entre el equipo médico y la familia?",
+                "¿Qué cursos de acción alternativos no se han considerado todavía?",
+                "¿Cómo influyen los factores culturales o religiosos en la toma de decisiones?",
+                "Si priorizamos el principio de beneficencia, ¿cuál sería el curso de acción recomendado?"
+            ]
+            
+            def handle_q_click(q):
+                st.session_state.last_question = q
+
+            q_cols = st.columns(2)
+            for i, q in enumerate(preguntas):
+                q_cols[i % 2].button(q, on_click=handle_q_click, args=(q,), use_container_width=True, key=f"q_{i}")
+            # --- FIN DE LA SECCIÓN REINTEGRADA ---
+
+            if prompt := st.chat_input("Escribe tu pregunta...") or st.session_state.get('last_question'):
+                st.session_state.last_question = ""
+                
                 if GEMINI_API_KEY:
                     st.session_state.chat_history.append({"role": "user", "content": prompt})
                     with st.spinner("Pensando..."):
@@ -500,7 +518,11 @@ def main():
                         respuesta = llamar_gemini(full_prompt, GEMINI_API_KEY)
                         st.session_state.chat_history.append({"role": "assistant", "content": respuesta})
                     if db:
-                        db.collection('casos_bioeticare360').document(st.session_state.case_id).update({"Historial del Chat de Deliberación": st.session_state.chat_history})
+                        try:
+                            db.collection('casos_bioeticare360').document(st.session_state.case_id).update({"Historial del Chat de Deliberación": st.session_state.chat_history})
+                        except Exception as e:
+                            log_error(f"Error actualizando historial de chat para {st.session_state.case_id}", e)
+                            st.warning("No se pudo guardar el historial de chat en la base de datos.")
                     st.rerun()
 
             st.subheader("Historial del Chat", anchor=False)
