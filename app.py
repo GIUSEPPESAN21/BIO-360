@@ -81,6 +81,7 @@ dilemas_opciones = {
 
 # --- 5. Lógica de Negocio y Reportes ---
 def safe_int(value, default=0):
+    """Convierte un valor a entero de forma segura, ideal para datos de formularios."""
     if value is None or value == '': return default
     try: return int(value)
     except (ValueError, TypeError): return default
@@ -107,6 +108,7 @@ class CasoBioetico:
         }
 
     def _extract_perspective(self, prefix, kwargs):
+        """Extrae y convierte de forma segura los valores de las perspectivas."""
         return {
             "autonomia": safe_int(kwargs.get(f'nivel_autonomia_{prefix}')),
             "beneficencia": safe_int(kwargs.get(f'nivel_beneficencia_{prefix}')),
@@ -236,7 +238,7 @@ if not GEMINI_API_KEY:
 tab_analisis, tab_chatbot, tab_consultar = st.tabs(["**Análisis de Caso**", "**Asistente de Bioética (Chatbot)**", "**Consultar Casos Anteriores**"])
 
 def display_case_details(report_data, key_prefix, container=st):
-    """Muestra el dashboard del caso con la UI avanzada y llaves únicas."""
+    """Muestra el dashboard del caso con la UI avanzada y llaves únicas y robustas."""
     with container.container(border=True):
         case_id = report_data.get('ID del Caso', 'N/A')
         st.subheader(f"Dashboard del Caso: `{case_id}`", anchor=False)
@@ -274,41 +276,32 @@ def display_case_details(report_data, key_prefix, container=st):
                 st.markdown("**Análisis IA de Historia Clínica (Elementos Clave)**")
                 st.info(report_data["Análisis IA de Historia Clínica"])
             
-            # --- SECCIÓN CORREGIDA (v3 - Definitiva) ---
-            # El error 'TypeError' era persistente y probablemente causado por una combinación de factores
-            # en la creación de llaves de widgets y el manejo de tipos de datos durante el re-renderizado.
-            # Esta versión es "hiper-defensiva" para garantizar la estabilidad:
-            # 1. Verifica que los datos a iterar (diccionarios) sean válidos.
-            # 2. "Sanitiza" TODAS las partes dinámicas de la llave (key) para eliminar caracteres especiales.
-            # 3. Convierte explícitamente el valor final de la métrica a entero.
+            # --- SECCIÓN CORREGIDA (v4 - Definitiva) ---
             st.markdown("**Ponderación por Perspectiva (escala 0-5)**")
             multiperspectiva = report_data.get("AnalisisMultiperspectiva", {})
-
+            
             if isinstance(multiperspectiva, dict):
+                # Usamos un contador para garantizar llaves 100% únicas y seguras
+                metric_key_counter = 0
                 for nombre, valores in multiperspectiva.items():
                     if not isinstance(valores, dict):
-                        st.warning(f"Datos de perspectiva para '{nombre}' no son válidos. Saltando.")
-                        continue
+                        continue # Ignorar datos malformados
 
                     st.markdown(f"**{nombre}**")
                     p_cols = st.columns(4)
                     
-                    # Sanitizar todas las partes de la llave para máxima seguridad
-                    nombre_sanitized = "".join(filter(str.isalnum, str(nombre)))
-                    case_id_sanitized = "".join(filter(str.isalnum, str(case_id)))
-
-                    # Obtener y convertir de forma segura los valores
-                    autonomia_val = int(valores.get('autonomia', 0))
-                    beneficencia_val = int(valores.get('beneficencia', 0))
-                    no_maleficencia_val = int(valores.get('no_maleficencia', 0))
-                    justicia_val = int(valores.get('justicia', 0))
-
-                    p_cols[0].metric("Autonomía", autonomia_val, key=f"{key_prefix}_metric_aut_{nombre_sanitized}_{case_id_sanitized}")
-                    p_cols[1].metric("Beneficencia", beneficencia_val, key=f"{key_prefix}_metric_ben_{nombre_sanitized}_{case_id_sanitized}")
-                    p_cols[2].metric("No Maleficencia", no_maleficencia_val, key=f"{key_prefix}_metric_nom_{nombre_sanitized}_{case_id_sanitized}")
-                    p_cols[3].metric("Justicia", justicia_val, key=f"{key_prefix}_metric_jus_{nombre_sanitized}_{case_id_sanitized}")
-            else:
-                st.warning("No se encontraron datos de 'AnalisisMultiperspectiva' o el formato es incorrecto.")
+                    metric_values = [
+                        ("Autonomía", valores.get('autonomia', 0)),
+                        ("Beneficencia", valores.get('beneficencia', 0)),
+                        ("No Maleficencia", valores.get('no_maleficencia', 0)),
+                        ("Justicia", valores.get('justicia', 0))
+                    ]
+                    
+                    for i, (label, value) in enumerate(metric_values):
+                        # La llave es ahora un simple número, a prueba de errores.
+                        key = f"{key_prefix}_metric_{metric_key_counter}"
+                        p_cols[i].metric(label, int(value), key=key)
+                        metric_key_counter += 1
             # --- FIN DE LA SECCIÓN CORREGIDA ---
             
             st.markdown("**Historial del Chat**")
@@ -360,6 +353,7 @@ with tab_analisis:
             semanas_gestacion = st.number_input("Semanas Gestación (si aplica)", 0, 42)
         with col2:
             st.subheader("Datos Administrativos", anchor=False)
+            # Se añade .strip() para limpiar espacios en blanco
             historia_clinica = st.text_input("Nº Historia Clínica / ID del Caso")
             nombre_analista = st.text_input("Nombre del Analista")
             condicion = st.selectbox("Condición", ["Estable", "Crítico", "Terminal", "Neonato"])
@@ -381,13 +375,32 @@ with tab_analisis:
         submitted = st.form_submit_button("Analizar Caso y Generar Dashboard", use_container_width=True)
 
     if submitted:
-        if not historia_clinica:
+        # Limpiar el ID para evitar problemas
+        cleaned_historia_clinica = historia_clinica.strip()
+        if not cleaned_historia_clinica:
             st.error("El campo 'Nº Historia Clínica / ID del Caso' es obligatorio.")
         else:
             with st.spinner("Procesando y generando reporte..."):
                 cleanup_temp_dir()
-                form_data = locals()
+                # --- SECCIÓN CORREGIDA (v4 - Definitiva) ---
+                # Se reemplaza locals() por un diccionario explícito para evitar contaminación de datos.
+                # Esto previene errores de serialización al guardar en Firebase.
+                form_data = {
+                    'nombre_paciente': nombre_paciente, 'historia_clinica': cleaned_historia_clinica,
+                    'edad': edad, 'genero': genero, 'nombre_analista': nombre_analista,
+                    'dilema_etico': dilema_etico, 'descripcion_caso': descripcion_caso,
+                    'antecedentes_culturales': antecedentes_culturales, 'condicion': condicion,
+                    'semanas_gestacion': semanas_gestacion, 'puntos_clave_ia': puntos_clave_ia,
+                    'nivel_autonomia_medico': nivel_autonomia_medico, 'nivel_beneficencia_medico': nivel_beneficencia_medico,
+                    'nivel_no_maleficencia_medico': nivel_no_maleficencia_medico, 'nivel_justicia_medico': nivel_justicia_medico,
+                    'nivel_autonomia_familia': nivel_autonomia_familia, 'nivel_beneficencia_familia': nivel_beneficencia_familia,
+                    'nivel_no_maleficencia_familia': nivel_no_maleficencia_familia, 'nivel_justicia_familia': nivel_justicia_familia,
+                    'nivel_autonomia_comite': nivel_autonomia_comite, 'nivel_beneficencia_comite': nivel_beneficencia_comite,
+                    'nivel_no_maleficencia_comite': nivel_no_maleficencia_comite, 'nivel_justicia_comite': nivel_justicia_comite,
+                }
                 caso = CasoBioetico(**form_data)
+                # --- FIN DE LA SECCIÓN CORREGIDA ---
+
                 chart_jsons = generar_visualizaciones_avanzadas(caso)
                 
                 st.session_state.chat_history = []
