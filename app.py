@@ -297,6 +297,11 @@ def display_case_details(report_data, container=st):
             except IndexError: # Manejar casos donde el resumen podría no ser analizado perfectamente
                 p_name_match, p_age_match, p_gender_match, p_condition_match, p_gestation_match = 'N/A', 0, 'N/A', 'N/A', 0
 
+            # Acceso seguro a los datos de perspectivas
+            medico_persp = report_data.get('AnalisisMultiperspectiva', {}).get('Equipo Médico', {})
+            familia_persp = report_data.get('AnalisisMultiperspectiva', {}).get('Familia/Paciente', {})
+            comite_persp = report_data.get('AnalisisMultiperspectiva', {}).get('Comité de Bioética', {})
+
             temp_caso_for_charts = CasoBioetico(
                 nombre_paciente=p_name_match,
                 historia_clinica=case_id,
@@ -304,19 +309,19 @@ def display_case_details(report_data, container=st):
                 genero=p_gender_match,
                 condicion=p_condition_match,
                 semanas_gestacion=p_gestation_match,
-                # Pasar los datos de perspectiva extraídos directamente
-                nivel_autonomia_medico=report_data['AnalisisMultiperspectiva']['Equipo Médico']['autonomia'],
-                nivel_beneficencia_medico=report_data['AnalisisMultiperspectiva']['Equipo Médico']['beneficencia'],
-                nivel_no_maleficencia_medico=report_data['AnalisisMultiperspectiva']['Equipo Médico']['no_maleficencia'],
-                nivel_justicia_medico=report_data['AnalisisMultiperspectiva']['Equipo Médico']['justicia'],
-                nivel_autonomia_familia=report_data['AnalisisMultiperspectiva']['Familia/Paciente']['autonomia'],
-                nivel_beneficencia_familia=report_data['AnalisisMultiperspectiva']['Familia/Paciente']['beneficencia'],
-                nivel_no_maleficencia_familia=report_data['AnalisisMultiperspectiva']['Familia/Paciente']['no_maleficencia'],
-                nivel_justicia_familia=report_data['AnalisisMultiperspectiva']['Familia/Paciente']['justicia'],
-                nivel_autonomia_comite=report_data['AnalisisMultiperspectiva']['Comité de Bioética']['autonomia'],
-                nivel_beneficencia_comite=report_data['AnalisisMultiperspectiva']['Comité de Bioética']['beneficencia'],
-                nivel_no_maleficencia_comite=report_data['AnalisisMultiperspectiva']['Comité de Bioética']['no_maleficencia'],
-                nivel_justicia_comite=report_data['AnalisisMultiperspectiva']['Comité de Bioética']['justicia'],
+                # Pasar los datos de perspectiva extraídos de forma segura
+                nivel_autonomia_medico=medico_persp.get('autonomia', 0),
+                nivel_beneficencia_medico=medico_persp.get('beneficencia', 0),
+                nivel_no_maleficencia_medico=medico_persp.get('no_maleficencia', 0),
+                nivel_justicia_medico=medico_persp.get('justicia', 0),
+                nivel_autonomia_familia=familia_persp.get('autonomia', 0),
+                nivel_beneficencia_familia=familia_persp.get('beneficencia', 0),
+                nivel_no_maleficencia_familia=familia_persp.get('no_maleficencia', 0),
+                nivel_justicia_familia=familia_persp.get('justicia', 0),
+                nivel_autonomia_comite=comite_persp.get('autonomia', 0),
+                nivel_beneficencia_comite=comite_persp.get('beneficencia', 0),
+                nivel_no_maleficencia_comite=comite_persp.get('no_maleficencia', 0),
+                nivel_justicia_comite=comite_persp.get('justicia', 0),
             )
             new_temp_dir = tempfile.mkdtemp()
             generar_visualizaciones_avanzadas(temp_caso_for_charts, new_temp_dir)
@@ -414,7 +419,7 @@ with tab_analisis:
                 # Intentar extraer el dilema sugerido de la salida de la IA si está ahí
                 for line in ai_analysis.split('\n'):
                     if "Dilema Ético Sugerido (de la lista):" in line:
-                        suggested_dilema_raw = line.replace("Dilema Ético Sugerido (de la lista):", "").strip()
+                        suggested_dilemma_raw = line.replace("Dilema Ético Sugerido (de la lista):", "").strip()
                         # Limpiar el dilema sugerido para que coincida exactamente con una de las opciones
                         found_dilemma = None
                         for d_key in dilemas_opciones.keys():
