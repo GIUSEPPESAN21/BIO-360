@@ -237,10 +237,15 @@ if not GEMINI_API_KEY:
 
 tab_analisis, tab_chatbot, tab_consultar = st.tabs(["**Análisis de Caso**", "**Asistente de Bioética (Chatbot)**", "**Consultar Casos Anteriores**"])
 
+# --- SECCIÓN CORREGIDA (v6 - Definitiva) ---
 def display_case_details(report_data, key_prefix, container=st):
     """Muestra el dashboard del caso con la UI avanzada y llaves únicas y robustas."""
     with container.container(border=True):
         case_id = report_data.get('ID del Caso', 'N/A')
+        # Se sanitiza el case_id UNA VEZ para usarlo en TODAS las llaves.
+        # Esto previene la corrupción de estado por caracteres especiales.
+        case_id_sanitized = "".join(filter(str.isalnum, str(case_id)))
+        
         st.subheader(f"Dashboard del Caso: `{case_id}`", anchor=False)
         st.markdown("---")
         
@@ -250,8 +255,9 @@ def display_case_details(report_data, key_prefix, container=st):
             st.markdown("##### Análisis Gráfico Avanzado")
             c1, c2 = st.columns(2)
             try:
-                c1.plotly_chart(pio.from_json(radar_json), use_container_width=True, key=f"{key_prefix}_radar_{case_id}")
-                c2.plotly_chart(pio.from_json(stats_json), use_container_width=True, key=f"{key_prefix}_stats_{case_id}")
+                # Se usa el case_id sanitizado para las llaves
+                c1.plotly_chart(pio.from_json(radar_json), use_container_width=True, key=f"{key_prefix}_radar_{case_id_sanitized}")
+                c2.plotly_chart(pio.from_json(stats_json), use_container_width=True, key=f"{key_prefix}_stats_{case_id_sanitized}")
             except Exception as e:
                 st.warning(f"No se pudieron cargar los gráficos para el caso {case_id}. Error: {e}")
             st.markdown("---")
@@ -270,13 +276,13 @@ def display_case_details(report_data, key_prefix, container=st):
             col_b.markdown(f"**Dilema Sugerido por IA:** {report_data.get('Dilema Sugerido por IA')}")
         
         with st.expander("Ver Detalles Completos, Ponderación y Chat"):
-            st.text_area("Descripción:", value=report_data.get('Descripción Detallada del Caso',''), height=150, disabled=True, key=f"{key_prefix}_desc_{case_id}")
-            st.text_area("Contexto Sociocultural:", value=report_data.get('Contexto Sociocultural y Familiar',''), height=100, disabled=True, key=f"{key_prefix}_context_{case_id}")
+            # Se usa el case_id sanitizado para las llaves
+            st.text_area("Descripción:", value=report_data.get('Descripción Detallada del Caso',''), height=150, disabled=True, key=f"{key_prefix}_desc_{case_id_sanitized}")
+            st.text_area("Contexto Sociocultural:", value=report_data.get('Contexto Sociocultural y Familiar',''), height=100, disabled=True, key=f"{key_prefix}_context_{case_id_sanitized}")
             if report_data.get("Análisis IA de Historia Clínica"):
                 st.markdown("**Análisis IA de Historia Clínica (Elementos Clave)**")
                 st.info(report_data["Análisis IA de Historia Clínica"])
             
-            # --- SECCIÓN CORREGIDA (v5 - Definitiva) ---
             st.markdown("**Ponderación por Perspectiva (escala 0-5)**")
             multiperspectiva = report_data.get("AnalisisMultiperspectiva", {})
             
@@ -298,12 +304,10 @@ def display_case_details(report_data, key_prefix, container=st):
                     
                     for i, (label, value) in enumerate(metric_values):
                         # La llave es ahora un simple número, a prueba de errores.
-                        key = f"{key_prefix}_metric_{metric_key_counter}"
-                        # Se re-valida el valor con safe_int() justo antes de renderizar
-                        # para garantizar que es un número válido.
+                        key = f"{key_prefix}_metric_{case_id_sanitized}_{metric_key_counter}"
+                        # Se re-valida el valor con safe_int() justo antes de renderizar.
                         p_cols[i].metric(label, safe_int(value), key=key)
                         metric_key_counter += 1
-            # --- FIN DE LA SECCIÓN CORREGIDA ---
             
             st.markdown("**Historial del Chat**")
             for msg in report_data.get("Historial del Chat de Deliberación", []):
