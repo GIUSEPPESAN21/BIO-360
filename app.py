@@ -74,7 +74,7 @@ def initialize_firebase():
             cred = credentials.Certificate(creds_dict)
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
-            st.success("🔌 Conexión con Firebase establecida.", icon="🔌")
+            st.success("Conexión con Firebase establecida.", icon="🔌")
             return firestore.client()
         else:
             st.warning("⚠️ Credenciales de Firebase no encontradas en `st.secrets`. Asegúrate de que la clave 'firebase_credentials' esté configurada.", icon="⚠️")
@@ -343,7 +343,9 @@ def display_case_details(report_data, container=st):
             st.markdown("**Ponderación por Perspectiva**")
             # Acceso seguro a los datos de perspectivas para la visualización
             perspectivas_display = report_data.get("AnalisisMultiperspectiva", {})
-            for nombre, valores in perspectivas_display.items():
+            for nombre, raw_valores in perspectivas_display.items():
+                # Asegurarse de que 'valores' sea un diccionario antes de usar .get()
+                valores = raw_valores if isinstance(raw_valores, dict) else {}
                 st.markdown(f"**{nombre}**")
                 p_cols = st.columns(4)
                 # Asegurar claves únicas para las métricas también
