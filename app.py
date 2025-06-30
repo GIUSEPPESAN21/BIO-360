@@ -274,17 +274,21 @@ def display_case_details(report_data, key_prefix, container=st):
                 st.markdown("**Análisis IA de Historia Clínica (Elementos Clave)**")
                 st.info(report_data["Análisis IA de Historia Clínica"])
             
-            # --- SECCIÓN CORREGIDA ---
-            # El error 'TypeError' ocurría porque st.metric() esperaba un número, pero recibía un texto como "3/5".
-            # La solución es pasar el valor numérico directamente. La escala se puede indicar en el título de la sección.
+            # --- SECCIÓN CORREGIDA (v2) ---
+            # El error 'TypeError' se debe a caracteres inválidos (espacios, '/') en la llave del widget.
+            # La solución es "sanitizar" el nombre de la perspectiva para crear una llave limpia y válida.
             st.markdown("**Ponderación por Perspectiva (escala 0-5)**")
             for nombre, valores in report_data.get("AnalisisMultiperspectiva", {}).items():
                 st.markdown(f"**{nombre}**")
                 p_cols = st.columns(4)
-                p_cols[0].metric("Autonomía", valores.get('autonomia', 0), key=f"{key_prefix}_metric_aut_{nombre}_{case_id}")
-                p_cols[1].metric("Beneficencia", valores.get('beneficencia', 0), key=f"{key_prefix}_metric_ben_{nombre}_{case_id}")
-                p_cols[2].metric("No Maleficencia", valores.get('no_maleficencia', 0), key=f"{key_prefix}_metric_nom_{nombre}_{case_id}")
-                p_cols[3].metric("Justicia", valores.get('justicia', 0), key=f"{key_prefix}_metric_jus_{nombre}_{case_id}")
+                
+                # Sanitizar el 'nombre' para que sea una llave válida (ej: "Familia/Paciente" -> "FamiliaPaciente")
+                nombre_sanitized = "".join(filter(str.isalnum, nombre))
+
+                p_cols[0].metric("Autonomía", valores.get('autonomia', 0), key=f"{key_prefix}_metric_aut_{nombre_sanitized}_{case_id}")
+                p_cols[1].metric("Beneficencia", valores.get('beneficencia', 0), key=f"{key_prefix}_metric_ben_{nombre_sanitized}_{case_id}")
+                p_cols[2].metric("No Maleficencia", valores.get('no_maleficencia', 0), key=f"{key_prefix}_metric_nom_{nombre_sanitized}_{case_id}")
+                p_cols[3].metric("Justicia", valores.get('justicia', 0), key=f"{key_prefix}_metric_jus_{nombre_sanitized}_{case_id}")
             # --- FIN DE LA SECCIÓN CORREGIDA ---
             
             st.markdown("**Historial del Chat**")
