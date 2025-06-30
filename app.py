@@ -50,14 +50,17 @@ def initialize_firebase():
     try:
         if "firebase_credentials" in st.secrets:
             creds_value = st.secrets["firebase_credentials"]
+            creds_dict = None
+
             if isinstance(creds_value, str):
                 try:
                     creds_dict = json.loads(creds_value)
                 except json.JSONDecodeError:
                     st.error("❌ Error: Las credenciales de Firebase no son un JSON válido. Asegúrate de que el contenido sea un JSON válido.", icon="❌")
                     return None
-            elif isinstance(creds_value, dict):
-                creds_dict = creds_value
+            # Verifica si el objeto se comporta como un diccionario (ej. AttrDict de Streamlit)
+            elif hasattr(creds_value, 'keys') and callable(getattr(creds_value, 'keys')):
+                creds_dict = dict(creds_value) # Convierte AttrDict a un diccionario regular
             else:
                 # Este es el camino de error específico de la imagen
                 st.error(f"❌ Error: Formato de credenciales de Firebase no reconocido. Tipo recibido: {type(creds_value)}. Asegúrate de que sea una cadena JSON o un diccionario.", icon="❌")
@@ -411,7 +414,7 @@ with tab_analisis:
                 # Intentar extraer el dilema sugerido de la salida de la IA si está ahí
                 for line in ai_analysis.split('\n'):
                     if "Dilema Ético Sugerido (de la lista):" in line:
-                        suggested_dilemma_raw = line.replace("Dilema Ético Sugerido (de la lista):", "").strip()
+                        suggested_dilema_raw = line.replace("Dilema Ético Sugerido (de la lista):", "").strip()
                         # Limpiar el dilema sugerido para que coincida exactamente con una de las opciones
                         found_dilemma = None
                         for d_key in dilemas_opciones.keys():
