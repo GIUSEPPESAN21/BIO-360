@@ -326,7 +326,7 @@ def display_case_details(report_data, container=st):
             radar_path = os.path.join(display_temp_dir, 'radar_comparativo.png')
             stats_path = os.path.join(display_temp_dir, 'estadisticas.png')
             if os.path.exists(radar_path): c1.image(radar_path, caption="Gráfico Comparativo de Perspectivas")
-            if os.o.exists(stats_path): c2.image(stats_path, caption="Análisis de Consenso vs. Disenso")
+            if os.path.exists(stats_path): c2.image(stats_path, caption="Análisis de Consenso vs. Disenso")
             st.markdown("---")
 
         if report_data.get("Análisis Deliberativo (IA)"):
