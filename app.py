@@ -276,31 +276,32 @@ def display_case_details(report_data, key_prefix, container=st):
                 st.markdown("**Análisis IA de Historia Clínica (Elementos Clave)**")
                 st.info(report_data["Análisis IA de Historia Clínica"])
             
-            # --- SECCIÓN CORREGIDA (v4 - Definitiva) ---
+            # --- SECCIÓN CORREGIDA (v5 - Definitiva) ---
             st.markdown("**Ponderación por Perspectiva (escala 0-5)**")
             multiperspectiva = report_data.get("AnalisisMultiperspectiva", {})
             
             if isinstance(multiperspectiva, dict):
-                # Usamos un contador para garantizar llaves 100% únicas y seguras
                 metric_key_counter = 0
                 for nombre, valores in multiperspectiva.items():
                     if not isinstance(valores, dict):
-                        continue # Ignorar datos malformados
+                        continue
 
                     st.markdown(f"**{nombre}**")
                     p_cols = st.columns(4)
                     
                     metric_values = [
-                        ("Autonomía", valores.get('autonomia', 0)),
-                        ("Beneficencia", valores.get('beneficencia', 0)),
-                        ("No Maleficencia", valores.get('no_maleficencia', 0)),
-                        ("Justicia", valores.get('justicia', 0))
+                        ("Autonomía", valores.get('autonomia')),
+                        ("Beneficencia", valores.get('beneficencia')),
+                        ("No Maleficencia", valores.get('no_maleficencia')),
+                        ("Justicia", valores.get('justicia'))
                     ]
                     
                     for i, (label, value) in enumerate(metric_values):
                         # La llave es ahora un simple número, a prueba de errores.
                         key = f"{key_prefix}_metric_{metric_key_counter}"
-                        p_cols[i].metric(label, int(value), key=key)
+                        # Se re-valida el valor con safe_int() justo antes de renderizar
+                        # para garantizar que es un número válido.
+                        p_cols[i].metric(label, safe_int(value), key=key)
                         metric_key_counter += 1
             # --- FIN DE LA SECCIÓN CORREGIDA ---
             
@@ -353,7 +354,6 @@ with tab_analisis:
             semanas_gestacion = st.number_input("Semanas Gestación (si aplica)", 0, 42)
         with col2:
             st.subheader("Datos Administrativos", anchor=False)
-            # Se añade .strip() para limpiar espacios en blanco
             historia_clinica = st.text_input("Nº Historia Clínica / ID del Caso")
             nombre_analista = st.text_input("Nombre del Analista")
             condicion = st.selectbox("Condición", ["Estable", "Crítico", "Terminal", "Neonato"])
@@ -375,16 +375,13 @@ with tab_analisis:
         submitted = st.form_submit_button("Analizar Caso y Generar Dashboard", use_container_width=True)
 
     if submitted:
-        # Limpiar el ID para evitar problemas
         cleaned_historia_clinica = historia_clinica.strip()
         if not cleaned_historia_clinica:
             st.error("El campo 'Nº Historia Clínica / ID del Caso' es obligatorio.")
         else:
             with st.spinner("Procesando y generando reporte..."):
                 cleanup_temp_dir()
-                # --- SECCIÓN CORREGIDA (v4 - Definitiva) ---
-                # Se reemplaza locals() por un diccionario explícito para evitar contaminación de datos.
-                # Esto previene errores de serialización al guardar en Firebase.
+                # Se usa un diccionario explícito para evitar la contaminación de datos por `locals()`
                 form_data = {
                     'nombre_paciente': nombre_paciente, 'historia_clinica': cleaned_historia_clinica,
                     'edad': edad, 'genero': genero, 'nombre_analista': nombre_analista,
@@ -399,8 +396,7 @@ with tab_analisis:
                     'nivel_no_maleficencia_comite': nivel_no_maleficencia_comite, 'nivel_justicia_comite': nivel_justicia_comite,
                 }
                 caso = CasoBioetico(**form_data)
-                # --- FIN DE LA SECCIÓN CORREGIDA ---
-
+                
                 chart_jsons = generar_visualizaciones_avanzadas(caso)
                 
                 st.session_state.chat_history = []
