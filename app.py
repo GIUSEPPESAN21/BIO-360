@@ -68,11 +68,6 @@ def safe_str(value, default=""):
         return default
     return str(value).strip()
 
-def generate_unique_key(prefix="widget"):
-    """Genera una clave única para elementos de Streamlit de forma más simple y robusta."""
-    st.session_state.key_counter += 1
-    return f"{prefix}_{st.session_state.key_counter}"
-
 def log_error(error_msg, exception=None):
     """Registra errores de forma consistente."""
     logger.error(f"BIOETHICARE ERROR: {error_msg}")
@@ -278,8 +273,6 @@ def display_case_details(report_data, key_prefix):
     """Muestra el dashboard del caso con la UI avanzada y llaves únicas y robustas."""
     try:
         case_id = safe_str(report_data.get('ID del Caso', 'caso_desconocido'))
-        # Sanitiza el case_id para usarlo en las llaves, eliminando caracteres conflictivos.
-        # Esta es la corrección clave para evitar la corrupción de estado de Streamlit.
         sanitized_id = "".join(filter(str.isalnum, case_id))
 
         st.subheader(f"Dashboard del Caso: `{case_id}`", anchor=False)
@@ -337,10 +330,10 @@ def display_case_details(report_data, key_prefix):
                         
                         for i, (label, m_key) in enumerate(zip(metric_labels, metric_keys)):
                             value = safe_int(valores.get(m_key, 0))
-                            # Se sanitiza el nombre de la perspectiva para la llave
-                            sanitized_nombre = "".join(filter(str.isalnum, nombre))
-                            unique_key = f"{key_prefix}_{sanitized_id}_{sanitized_nombre}_{m_key}"
-                            p_cols[i].metric(label, value, key=unique_key)
+                            # --- CORRECCIÓN FINAL Y DEFINITIVA ---
+                            # Se elimina el argumento 'key' de st.metric, ya que la versión de Streamlit
+                            # en el entorno de despliegue no lo soporta. Este era el error real.
+                            p_cols[i].metric(label, value)
             
             # Historial del chat
             st.markdown("**Historial del Chat**")
@@ -358,7 +351,7 @@ def display_case_details(report_data, key_prefix):
 def cleanup_temp_dir():
     """Limpia y recrea el directorio temporal."""
     try:
-        if st.session_state.temp_dir and os.path.exists(st.session_state.temp_dir):
+        if 'temp_dir' in st.session_state and st.session_state.temp_dir and os.path.exists(st.session_state.temp_dir):
             shutil.rmtree(st.session_state.temp_dir)
         st.session_state.temp_dir = tempfile.mkdtemp()
     except Exception as e:
@@ -399,13 +392,12 @@ def main():
 
         st.header("2. Registro y Contexto del Caso", anchor=False)
         with st.form("caso_form"):
-            # ... (definición del formulario como antes)
             col1, col2 = st.columns(2)
             with col1:
                 nombre_paciente = st.text_input("Nombre del Paciente")
-                edad = st.number_input("Edad (años)", 0, 120)
+                edad = st.number_input("Edad (años)", 0, 120, value=0)
                 genero = st.selectbox("Género", ["Masculino", "Femenino", "Otro"])
-                semanas_gestacion = st.number_input("Semanas Gestación (si aplica)", 0, 42)
+                semanas_gestacion = st.number_input("Semanas Gestación (si aplica)", 0, 42, value=0)
             with col2:
                 historia_clinica = st.text_input("Nº Historia Clínica / ID del Caso")
                 nombre_analista = st.text_input("Nombre del Analista")
@@ -486,7 +478,7 @@ def main():
                             db.collection('casos_bioeticare360').document(st.session_state.case_id).update({"Análisis Deliberativo (IA)": analysis})
                         st.rerun()
             
-            pdf_path = os.path.join(st.session_state.temp_dir, f"Reporte_{st.session_state.case_id}.pdf")
+            pdf_path = os.path.join(st.session_state.temp_dir, f"Reporte_{safe_str(st.session_state.case_id, 'reporte')}.pdf")
             crear_reporte_pdf_completo(st.session_state.reporte, pdf_path)
             with open(pdf_path, "rb") as pdf_file:
                 a2.download_button("📄 Descargar Reporte PDF", pdf_file, os.path.basename(pdf_path), "application/pdf", use_container_width=True, key="download_pdf_button")
