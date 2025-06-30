@@ -1,3 +1,7 @@
+# app.py - BIOETHICARE 360 - Versión Profesional Final
+# Autores: Anderson Díaz Pérez, Joseph Javier Sanchez Acuña & AI Colaborativa
+# VERSIÓN CONSOLIDADA CON UI PROFESIONAL, ANÁLISIS MULTIPERSPECTIVA Y MEJORAS INTEGRADAS
+
 # --- 1. Importaciones ---
 import os
 import json
