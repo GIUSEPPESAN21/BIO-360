@@ -322,7 +322,6 @@ with tab_analisis:
 
     st.header("2. Registro y Contexto del Caso", anchor=False)
     with st.form("caso_form"):
-        # ... (resto del formulario sin cambios lógicos)
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Identificación", anchor=False)
@@ -394,7 +393,6 @@ with tab_analisis:
         display_case_details(st.session_state.reporte)
 
 with tab_chatbot:
-    # ... (código del chatbot sin cambios)
     st.header("🤖 Asistente de Bioética con Gemini", anchor=False)
     if not st.session_state.case_id:
         st.info("Primero analiza un caso para poder usar el chatbot contextual.")
@@ -425,7 +423,6 @@ with tab_chatbot:
                 st.markdown(msg["content"])
 
 with tab_consultar:
-    # ... (código de la pestaña de consulta sin cambios)
     st.header("🔍 Consultar Casos Guardados", anchor=False)
     if not db: st.error("La conexión con Firebase no está disponible.")
     else:
