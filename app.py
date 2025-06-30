@@ -1,7 +1,3 @@
-# app.py - BIOETHICARE 360 - Versión Profesional Definitiva
-# Autores: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
-# VERSIÓN CONSOLIDADA CON UI PROFESIONAL, ANÁLISIS MULTIPERSPECTIVA Y MEJORAS INTEGRADAS
-
 # --- 1. Importaciones ---
 import os
 import json
@@ -42,6 +38,10 @@ if 'last_question' not in st.session_state:
     st.session_state.last_question = ""
 if 'dilema_sugerido' not in st.session_state:
     st.session_state.dilema_sugerido = None
+if 'ai_clinical_analysis_output' not in st.session_state:
+    st.session_state.ai_clinical_analysis_output = ""
+if 'clinical_history_input' not in st.session_state: # Para persistir el contenido del área de texto
+    st.session_state.clinical_history_input = ""
 
 # --- 3. Conexión con Firebase ---
 @st.cache_resource
@@ -49,7 +49,19 @@ def initialize_firebase():
     """Inicializa la conexión con Firebase de forma segura."""
     try:
         if "firebase_credentials" in st.secrets:
-            creds_dict = dict(st.secrets["firebase_credentials"])
+            creds_value = st.secrets["firebase_credentials"]
+            if isinstance(creds_value, str):
+                try:
+                    creds_dict = json.loads(creds_value)
+                except json.JSONDecodeError:
+                    st.error("❌ Error: Las credenciales de Firebase no son un JSON válido.", icon="❌")
+                    return None
+            elif isinstance(creds_value, dict):
+                creds_dict = creds_value
+            else:
+                st.error("❌ Error: Formato de credenciales de Firebase no reconocido.", icon="❌")
+                return None
+
             cred = credentials.Certificate(creds_dict)
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
@@ -80,6 +92,7 @@ dilemas_opciones = {
 
 # --- 5. Lógica de Negocio y Reportes ---
 def safe_int(value, default=0):
+    """Convierte un valor a entero de forma segura, devolviendo un valor predeterminado si falla la conversión."""
     if value is None or value == '': return default
     try: return int(value)
     except (ValueError, TypeError): return default
@@ -98,6 +111,7 @@ class CasoBioetico:
         self.condicion = kwargs.get('condicion', 'Estable')
         self.semanas_gestacion = safe_int(kwargs.get('semanas_gestacion'), 0)
         self.puntos_clave_ia = kwargs.get('puntos_clave_ia', '')
+        self.ai_clinical_analysis_summary = kwargs.get('ai_clinical_analysis_summary', '') # Nuevo campo para el análisis de IA de la historia clínica
         self.perspectivas = {
             "medico": self._extract_perspective("medico", kwargs),
             "familia": self._extract_perspective("familia", kwargs),
@@ -105,6 +119,7 @@ class CasoBioetico:
         }
 
     def _extract_perspective(self, prefix, kwargs):
+        """Extrae las puntuaciones de los principios para una perspectiva dada de los kwargs."""
         return {
             "autonomia": safe_int(kwargs.get(f'nivel_autonomia_{prefix}')),
             "beneficencia": safe_int(kwargs.get(f'nivel_beneficencia_{prefix}')),
@@ -124,6 +139,7 @@ def generar_reporte_completo(caso, dilema_sugerido, chat_history):
         "Descripción Detallada del Caso": caso.descripcion_caso,
         "Contexto Sociocultural y Familiar": caso.antecedentes_culturales,
         "Puntos Clave para Deliberación IA": caso.puntos_clave_ia,
+        "Análisis IA de Historia Clínica": caso.ai_clinical_analysis_summary, # Incluir nuevo campo
         "AnalisisMultiperspectiva": {
             "Equipo Médico": caso.perspectivas["medico"],
             "Familia/Paciente": caso.perspectivas["familia"],
@@ -171,7 +187,7 @@ def crear_reporte_pdf_completo(data, temp_dir, filename):
 
     story.append(Paragraph("Reporte Deliberativo - BIOETHICARE 360", h1))
     
-    order = ["ID del Caso", "Fecha Análisis", "Analista", "Resumen del Paciente", "Dilema Ético Principal (Seleccionado)", "Dilema Sugerido por IA", "Descripción Detallada del Caso", "Contexto Sociocultural y Familiar", "Puntos Clave para Deliberación IA"]
+    order = ["ID del Caso", "Fecha Análisis", "Analista", "Resumen del Paciente", "Dilema Ético Principal (Seleccionado)", "Dilema Sugerido por IA", "Descripción Detallada del Caso", "Contexto Sociocultural y Familiar", "Puntos Clave para Deliberación IA", "Análisis IA de Historia Clínica"] # Orden actualizado
     for key in order:
         if key in data and data[key]:
             story.append(Paragraph(key, h2))
@@ -224,6 +240,17 @@ def llamar_gemini(prompt, api_key):
         st.error(f"Error de conexión con la API de Gemini: {e}")
         return "Error de conexión."
 
+# --- Función de ayuda para los deslizadores ---
+def create_perspective_sliders(prefix, st_container):
+    """Genera un conjunto de 4 deslizadores para una perspectiva dada."""
+    principles = ["Autonomía", "Beneficencia", "No Maleficencia", "Justicia"]
+    values = {}
+    cols = st_container.columns(4)
+    for i, p in enumerate(principles):
+        # Usar una clave única para cada deslizador basada en el prefijo y el principio
+        values[p.lower().replace(" ", "_")] = cols[i].slider(p, 0, 5, 3, key=f"{prefix}_{p.lower().replace(' ', '_')}_slider")
+    return values
+
 # --- 7. Interfaz de Usuario ---
 st.title("BIOETHICARE 360 🏥")
 with st.expander("Autores"):
@@ -239,21 +266,66 @@ if not GEMINI_API_KEY:
 
 tab_analisis, tab_chatbot, tab_consultar = st.tabs(["**Análisis de Caso**", "**Asistente de Bioética (Chatbot)**", "**Consultar Casos Anteriores**"])
 
-def display_case_details(report_data, temp_dir=None, container=st):
+def display_case_details(report_data, container=st):
     """Muestra el dashboard del caso con la UI avanzada."""
     with container.container(border=True):
         case_id = report_data.get('ID del Caso', 'N/A')
         st.subheader(f"Dashboard del Caso: `{case_id}`", anchor=False)
         st.markdown("---")
         
-        # Mostrar gráficos si el directorio temporal existe
-        if temp_dir and os.path.exists(temp_dir):
+        # Regenerar imágenes para mostrar si no están ya disponibles en session_state.temp_dir
+        # Esta parte debe tener cuidado de no sobrescribir el temp_dir de la sesión activa
+        # si estamos viendo el caso *actual*.
+        display_temp_dir = None
+        if st.session_state.case_id == case_id and st.session_state.temp_dir and os.path.exists(st.session_state.temp_dir):
+            display_temp_dir = st.session_state.temp_dir
+        else: # Para casos históricos, o si temp_dir fue limpiado
+            # Reconstruir un objeto CasoBioetico a partir de report_data para generar gráficos
+            # Esto requiere mapear cuidadosamente report_data de nuevo a los argumentos del constructor de CasoBioetico
+            # Extraer datos para el constructor de CasoBioetico
+            patient_summary = report_data.get('Resumen del Paciente', '')
+            try:
+                p_name_match = patient_summary.split(',')[0].replace('Paciente ', '')
+                p_age_match = safe_int(patient_summary.split(',')[1].strip().split(' ')[0])
+                p_gender_match = patient_summary.split(',')[2].strip().split(' ')[0]
+                p_condition_match = patient_summary.split('condición ')[1].split('.')[0]
+                p_gestation_match = safe_int(patient_summary.split('Neonato de ')[1].split(' ')[0]) if 'Neonato de' in patient_summary else 0
+            except IndexError: # Manejar casos donde el resumen podría no ser analizado perfectamente
+                p_name_match, p_age_match, p_gender_match, p_condition_match, p_gestation_match = 'N/A', 0, 'N/A', 'N/A', 0
+
+            temp_caso_for_charts = CasoBioetico(
+                nombre_paciente=p_name_match,
+                historia_clinica=case_id,
+                edad=p_age_match,
+                genero=p_gender_match,
+                condicion=p_condition_match,
+                semanas_gestacion=p_gestation_match,
+                # Pasar los datos de perspectiva extraídos directamente
+                nivel_autonomia_medico=report_data['AnalisisMultiperspectiva']['Equipo Médico']['autonomia'],
+                nivel_beneficencia_medico=report_data['AnalisisMultiperspectiva']['Equipo Médico']['beneficencia'],
+                nivel_no_maleficencia_medico=report_data['AnalisisMultiperspectiva']['Equipo Médico']['no_maleficencia'],
+                nivel_justicia_medico=report_data['AnalisisMultiperspectiva']['Equipo Médico']['justicia'],
+                nivel_autonomia_familia=report_data['AnalisisMultiperspectiva']['Familia/Paciente']['autonomia'],
+                nivel_beneficencia_familia=report_data['AnalisisMultiperspectiva']['Familia/Paciente']['beneficencia'],
+                nivel_no_maleficencia_familia=report_data['AnalisisMultiperspectiva']['Familia/Paciente']['no_maleficencia'],
+                nivel_justicia_familia=report_data['AnalisisMultiperspectiva']['Familia/Paciente']['justicia'],
+                nivel_autonomia_comite=report_data['AnalisisMultiperspectiva']['Comité de Bioética']['autonomia'],
+                nivel_beneficencia_comite=report_data['AnalisisMultiperspectiva']['Comité de Bioética']['beneficencia'],
+                nivel_no_maleficencia_comite=report_data['AnalisisMultiperspectiva']['Comité de Bioética']['no_maleficencia'],
+                nivel_justicia_comite=report_data['AnalisisMultiperspectiva']['Comité de Bioética']['justicia'],
+            )
+            new_temp_dir = tempfile.mkdtemp()
+            generar_visualizaciones_avanzadas(temp_caso_for_charts, new_temp_dir)
+            display_temp_dir = new_temp_dir
+            # Nota: Este new_temp_dir no se almacena en el estado de la sesión, por lo que será limpiado por el SO más tarde.
+
+        if display_temp_dir and os.path.exists(display_temp_dir):
             st.markdown("##### Análisis Gráfico Avanzado")
             c1, c2 = st.columns(2)
-            radar_path = os.path.join(temp_dir, 'radar_comparativo.png')
-            stats_path = os.path.join(temp_dir, 'estadisticas.png')
+            radar_path = os.path.join(display_temp_dir, 'radar_comparativo.png')
+            stats_path = os.path.join(display_temp_dir, 'estadisticas.png')
             if os.path.exists(radar_path): c1.image(radar_path, caption="Gráfico Comparativo de Perspectivas")
-            if os.path.exists(stats_path): c2.image(stats_path, caption="Análisis de Consenso vs. Disenso")
+            if os.o.exists(stats_path): c2.image(stats_path, caption="Análisis de Consenso vs. Disenso")
             st.markdown("---")
 
         if report_data.get("Análisis Deliberativo (IA)"):
@@ -268,10 +340,14 @@ def display_case_details(report_data, temp_dir=None, container=st):
         col_b.markdown(f"**Dilema Seleccionado:** {report_data.get('Dilema Ético Principal (Seleccionado)', 'N/A')}")
         if report_data.get("Dilema Sugerido por IA"):
             col_b.markdown(f"**Dilema Sugerido por IA:** {report_data.get('Dilema Sugerido por IA')}")
-        
+            
         with st.expander("Ver Detalles Completos, Ponderación y Chat"):
             st.text_area("Descripción:", value=report_data.get('Descripción Detallada del Caso',''), height=150, disabled=True, key=f"desc_{case_id}")
             st.text_area("Contexto Sociocultural:", value=report_data.get('Contexto Sociocultural y Familiar',''), height=100, disabled=True, key=f"context_{case_id}")
+            
+            if report_data.get("Análisis IA de Historia Clínica"): # Mostrar nuevo análisis de IA
+                st.markdown("**Análisis IA de Historia Clínica (Elementos Clave)**")
+                st.info(report_data["Análisis IA de Historia Clínica"])
             
             st.markdown("**Ponderación por Perspectiva**")
             for nombre, valores in report_data.get("AnalisisMultiperspectiva", {}).items():
@@ -298,6 +374,65 @@ def cleanup_temp_dir():
 
 with tab_analisis:
     st.header("1. Registro y Contexto del Caso", anchor=False)
+    
+    # Nuevo: Entrada de Historia Clínica y Análisis de IA
+    st.subheader("Historia Clínica del Paciente (Opcional para Análisis IA)", anchor=False)
+    st.text_area(
+        "Pega aquí la historia clínica del paciente para que la IA extraiga elementos clave.",
+        key="clinical_history_input",
+        height=300,
+        value=st.session_state.clinical_history_input # Persistir valor
+    )
+
+    if st.button("🤖 Analizar Historia Clínica con IA", use_container_width=True, key="analyze_clinical_history_btn"):
+        if st.session_state.clinical_history_input and GEMINI_API_KEY:
+            with st.spinner("Analizando historia clínica con Gemini..."):
+                clinical_history_text = st.session_state.clinical_history_input
+                prompt_clinical_analysis = f"""
+                Analiza la siguiente historia clínica del paciente. Tu objetivo es extraer los elementos más relevantes para un análisis bioético y sugerir cómo podrían informar los campos de un software de análisis de casos.
+
+                **Historia Clínica:**
+                {clinical_history_text}
+
+                **Instrucciones para la Respuesta:**
+                1.  **Resumen de Datos Clave:** Un breve resumen de los datos médicos cruciales (diagnóstico principal, estado actual, tratamientos relevantes).
+                2.  **Identificación de Conflictos Éticos Potenciales:** ¿Qué dilemas o tensiones éticas se vislumbran en esta historia?
+                3.  **Sugerencias para el Campo 'Descripción Detallada del Caso':** Extrae los puntos narrativos más importantes.
+                4.  **Sugerencias para el Campo 'Contexto Sociocultural y Familiar':** ¿Hay indicios de factores culturales, familiares o sociales relevantes?
+                5.  **Sugerencias para el Campo 'Puntos Clave para Deliberación IA':** Formula preguntas o áreas específicas que la IA debería considerar en una deliberación.
+                6.  **Dilema Ético Sugerido (de la lista):** De la siguiente lista de dilemas, ¿cuál es el más probable o prominente? Responde solo el nombre del dilema de la lista, si es posible.
+                    Lista de dilemas: {', '.join(dilemas_opciones.keys())}
+
+                Formato de la respuesta: Utiliza encabezados claros para cada sección.
+                """
+                ai_analysis = llamar_gemini(prompt_clinical_analysis, GEMINI_API_KEY)
+                st.session_state.ai_clinical_analysis_output = ai_analysis
+                # Intentar extraer el dilema sugerido de la salida de la IA si está ahí
+                for line in ai_analysis.split('\n'):
+                    if "Dilema Ético Sugerido (de la lista):" in line:
+                        suggested_dilemma_raw = line.replace("Dilema Ético Sugerido (de la lista):", "").strip()
+                        # Limpiar el dilema sugerido para que coincida exactamente con una de las opciones
+                        found_dilemma = None
+                        for d_key in dilemas_opciones.keys():
+                            if d_key.lower() in suggested_dilemma_raw.lower():
+                                found_dilemma = d_key
+                                break
+                        if found_dilemma:
+                            st.session_state.dilema_sugerido = found_dilemma
+                            st.success(f"Dilema Sugerido por IA desde Historia Clínica: **{st.session_state.dilema_sugerido}**")
+                        break
+            st.rerun()
+        elif not GEMINI_API_KEY:
+            st.error("La clave de API de Gemini es necesaria para analizar la historia clínica.")
+        else:
+            st.warning("Por favor, pega la historia clínica en el campo de texto para que la IA la analice.")
+
+    if st.session_state.ai_clinical_analysis_output:
+        st.subheader("Análisis de la Historia Clínica por IA", anchor=False)
+        st.markdown(st.session_state.ai_clinical_analysis_output)
+        st.markdown("---")
+
+
     with st.form("caso_form"):
         col1, col2 = st.columns(2)
         with col1:
@@ -316,8 +451,10 @@ with tab_analisis:
         dilema_etico = st.selectbox("Dilema Ético Principal", options=list(dilemas_opciones.keys()))
         descripcion_caso = st.text_area("Descripción Detallada del Caso", height=150)
         
-        # El botón de sugerencia ahora es un botón normal, no de formulario
-        if st.form_submit_button("Sugerir Dilema con IA", use_container_width=True):
+        # El botón de sugerencia de dilema de IA ahora está fuera del formulario para un mejor flujo
+        # Pero si el usuario aún quiere sugerir basándose en la descripción, esto puede quedarse.
+        # Por ahora, lo mantendremos ya que es un prompt diferente.
+        if st.form_submit_button("Sugerir Dilema con IA (desde Descripción)", use_container_width=True):
             if descripcion_caso and GEMINI_API_KEY:
                 with st.spinner("Consultando a Gemini para sugerencia..."):
                     prompt = f"De estos dilemas: {', '.join(dilemas_opciones.keys())}. ¿Cuál es el más prominente en este caso? '{descripcion_caso}'. Responde solo el nombre del dilema."
@@ -327,18 +464,23 @@ with tab_analisis:
             else: st.warning("Ingrese una descripción del caso.")
 
         if st.session_state.dilema_sugerido:
-             st.success(f"Dilema Sugerido por IA: **{st.session_state.dilema_sugerido}**")
+            st.success(f"Dilema Sugerido por IA: **{st.session_state.dilema_sugerido}**")
 
         antecedentes_culturales = st.text_area("Contexto Sociocultural y Familiar", height=100)
         puntos_clave_ia = st.text_area("Puntos Clave para Deliberación IA (Opcional)", height=100, help="Guíe a la IA con los conflictos o preguntas principales.")
         
         st.header("2. Ponderación Multiperspectiva (0-5)", anchor=False)
+        # Creación de deslizadores refactorizada
+        medico_scores = {}
+        familia_scores = {}
+        comite_scores = {}
+
         with st.expander("Perspectiva del Equipo Médico"):
-            c = st.columns(4); nivel_autonomia_medico = c[0].slider("Autonomía",0,5,3,key="am"); nivel_beneficencia_medico = c[1].slider("Beneficencia",0,5,3,key="bm"); nivel_no_maleficencia_medico = c[2].slider("No Maleficencia",0,5,3,key="nmm"); nivel_justicia_medico = c[3].slider("Justicia",0,5,3,key="jm")
+            medico_scores = create_perspective_sliders("medico", st)
         with st.expander("Perspectiva de la Familia / Paciente"):
-            c = st.columns(4); nivel_autonomia_familia = c[0].slider("Autonomía",0,5,3,key="af"); nivel_beneficencia_familia = c[1].slider("Beneficencia",0,5,3,key="bf"); nivel_no_maleficencia_familia = c[2].slider("No Maleficencia",0,5,3,key="nmf"); nivel_justicia_familia = c[3].slider("Justicia",0,5,3,key="jf")
+            familia_scores = create_perspective_sliders("familia", st)
         with st.expander("Perspectiva del Comité de Bioética"):
-            c = st.columns(4); nivel_autonomia_comite = c[0].slider("Autonomía",0,5,3,key="ac"); nivel_beneficencia_comite = c[1].slider("Beneficencia",0,5,3,key="bc"); nivel_no_maleficencia_comite = c[2].slider("No Maleficencia",0,5,3,key="nmc"); nivel_justicia_comite = c[3].slider("Justicia",0,5,3,key="jc")
+            comite_scores = create_perspective_sliders("comite", st)
 
         submitted = st.form_submit_button("Analizar Caso y Generar Dashboard", use_container_width=True)
 
@@ -348,8 +490,28 @@ with tab_analisis:
         else:
             with st.spinner("Procesando y generando reporte..."):
                 cleanup_temp_dir()
-                form_data = locals()
-                caso = CasoBioetico(**form_data)
+                
+                # Recopilar datos del formulario explícitamente, mapeando las salidas de los deslizadores
+                form_data_for_caso = {
+                    'nombre_paciente': nombre_paciente,
+                    'historia_clinica': historia_clinica,
+                    'edad': edad,
+                    'genero': genero,
+                    'nombre_analista': nombre_analista,
+                    'dilema_etico': dilema_etico,
+                    'descripcion_caso': descripcion_caso,
+                    'antecedentes_culturales': antecedentes_culturales,
+                    'condicion': condicion,
+                    'semanas_gestacion': semanas_gestacion,
+                    'puntos_clave_ia': puntos_clave_ia,
+                    'ai_clinical_analysis_summary': st.session_state.ai_clinical_analysis_output, # Pasar el resumen del análisis de IA
+                }
+                # Mapear las puntuaciones de perspectiva de nuevo a la estructura plana esperada por CasoBioetico
+                for p_name, scores_dict in [("medico", medico_scores), ("familia", familia_scores), ("comite", comite_scores)]:
+                    for principle, value in scores_dict.items():
+                        form_data_for_caso[f'nivel_{principle}_{p_name}'] = value
+
+                caso = CasoBioetico(**form_data_for_caso)
                 temp_dir = tempfile.mkdtemp()
                 generar_visualizaciones_avanzadas(caso, temp_dir)
                 
@@ -372,20 +534,34 @@ with tab_analisis:
             if GEMINI_API_KEY:
                 with st.spinner("Contactando a Gemini..."):
                     p_clave = st.session_state.reporte.get("Puntos Clave para Deliberación IA", "")
-                    prompt = f"""Como comité de bioética, analiza: {json.dumps(st.session_state.reporte, indent=2, ensure_ascii=False)}. 
-                    Instrucciones: 1.Sintetiza el conflicto. 2.Delibera sobre la tensión entre principios/perspectivas. 3.Enfócate en estos Puntos Clave: '{p_clave}'. 4.Concluye con una recomendación.
+                    prompt = f"""
+                    Como comité de bioética, analiza el siguiente caso.
+
+                    **Información del Caso:**
+                    {json.dumps(st.session_state.reporte, indent=2, ensure_ascii=False)}
+
+                    **Puntos Clave para la Deliberación (énfasis en esto):**
+                    {p_clave if p_clave else "No se proporcionaron puntos clave adicionales. Enfócate en la descripción y la ponderación."}
+
+                    **Instrucciones para el Análisis:**
+                    1.  **Síntesis del Conflicto:** Identifica claramente el conflicto bioético central, destacando los principios o valores en tensión.
+                    2.  **Análisis Multiperspectiva:** Delibera sobre cómo las diferentes perspectivas (médico, familia/paciente, comité) ponderan los principios de autonomía, beneficencia, no maleficencia y justicia. Señala las áreas de consenso y disenso.
+                    3.  **Consideración de Puntos Clave:** Integra los 'Puntos Clave para Deliberación IA' proporcionados, si existen, para guiar tu análisis.
+                    4.  **Recomendación Bioética:** Concluye con una recomendación clara y justificada, considerando el bienestar del paciente, la ética profesional y el contexto legal/social relevante.
+
+                    Tu respuesta debe ser profesional, estructurada y basada en principios bioéticos.
                     """
                     analysis = llamar_gemini(prompt, GEMINI_API_KEY)
                     st.session_state.reporte["Análisis Deliberativo (IA)"] = analysis
                     if db: db.collection('casos_bioeticare360').document(st.session_state.case_id).update({"Análisis Deliberativo (IA)": analysis})
                     st.rerun()
-        
+            
         pdf_path = os.path.join(st.session_state.temp_dir, f"Reporte_{st.session_state.case_id}.pdf")
         crear_reporte_pdf_completo(st.session_state.reporte, st.session_state.temp_dir, pdf_path)
         with open(pdf_path, "rb") as pdf_file:
             a2.download_button("📄 Descargar Reporte PDF", pdf_file, os.path.basename(pdf_path), "application/pdf", use_container_width=True)
-        
-        display_case_details(st.session_state.reporte, st.session_state.temp_dir)
+            
+        display_case_details(st.session_state.reporte) # temp_dir es manejado internamente ahora
 
 with tab_chatbot:
     st.header("🤖 Asistente de Bioética con Gemini", anchor=False)
@@ -406,7 +582,23 @@ with tab_chatbot:
                 st.session_state.chat_history.append({"role": "user", "content": prompt})
                 with st.spinner("Pensando..."):
                     contexto = json.dumps(st.session_state.reporte, indent=2, ensure_ascii=False)
-                    full_prompt = f"Eres un experto en bioética. Caso: {contexto}. Pregunta: '{prompt}'. Responde concisamente."
+                    full_prompt = f"""
+                    Eres un asistente de bioética especializado en la deliberación de casos clínicos. Se te ha proporcionado el siguiente caso y su análisis inicial.
+
+                    **Contexto del Caso Actual:**
+                    {contexto}
+
+                    **Pregunta del Usuario:**
+                    '{prompt}'
+
+                    **Instrucciones para tu respuesta:**
+                    1.  **Enfócate en el Caso:** Tu respuesta debe ser directamente relevante al caso proporcionado, utilizando la información disponible.
+                    2.  **Rol de Experto:** Responde desde una perspectiva de experto en bioética, aplicando principios y marcos éticos.
+                    3.  **Claridad y Concisión:** Sé claro, directo y conciso. Evita la divagación.
+                    4.  **No Generalices:** No des respuestas genéricas si el caso permite una respuesta específica.
+
+                    Proporciona tu respuesta basada en el contexto dado y la pregunta:
+                    """
                     respuesta = llamar_gemini(full_prompt, GEMINI_API_KEY)
                     st.session_state.chat_history.append({"role": "assistant", "content": respuesta})
                 if db: db.collection('casos_bioeticare360').document(st.session_state.case_id).update({"Historial del Chat de Deliberación": st.session_state.chat_history})
@@ -427,8 +619,7 @@ with tab_consultar:
             if not casos: st.info("No hay casos guardados.")
             else:
                 id_sel = st.selectbox("Selecciona un caso para ver sus detalles", options=list(casos.keys()))
-                if id_sel: 
-                    # Al consultar, no tenemos un directorio temporal, por lo que no lo pasamos
-                    display_case_details(casos[id_sel], temp_dir=None)
+                if id_sel:  
+                    display_case_details(casos[id_sel])
         except Exception as e:
             st.error(f"Ocurrió un error al consultar los casos desde Firebase: {e}")
