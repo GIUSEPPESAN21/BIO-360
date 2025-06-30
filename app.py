@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import numpy as np
 import tempfile # Para manejo de archivos temporales
 import shutil   # Para eliminar directorios temporales
+import plotly.io as pio # Importar plotly.io para leer figuras JSON
 
 # Importaciones para PDF
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
@@ -131,11 +132,12 @@ class CasoBioetico:
             "justicia": safe_int(kwargs.get(f'nivel_justicia_{prefix}')),
         }
 
-def generar_reporte_completo(caso, dilema_sugerido, chat_history):
+def generar_reporte_completo(caso, dilema_sugerido, chat_history, chart_jsons=None):
     """Genera el diccionario del reporte con la nueva estructura."""
     resumen_paciente = f"Paciente {caso.nombre_paciente}, {caso.edad} años, género {caso.genero}, condición {caso.condicion}."
     if caso.semanas_gestacion > 0: resumen_paciente += f" Neonato de {caso.semanas_gestacion} sem."
-    return {
+    
+    report_data = {
         "ID del Caso": caso.historia_clinica, "Fecha Análisis": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Analista": caso.nombre_analista, "Resumen del Paciente": resumen_paciente,
         "Dilema Ético Principal (Seleccionado)": caso.dilema_etico,
@@ -152,9 +154,15 @@ def generar_reporte_completo(caso, dilema_sugerido, chat_history):
         "Análisis Deliberativo (IA)": "",
         "Historial del Chat de Deliberación": chat_history,
     }
+    
+    if chart_jsons:
+        report_data['radar_chart_json'] = chart_jsons.get('radar_comparativo_json')
+        report_data['stats_chart_json'] = chart_jsons.get('estadisticas_json')
+        
+    return report_data
 
-def generar_visualizaciones_avanzadas(caso, temp_dir):
-    """Genera los gráficos y los guarda en un directorio temporal."""
+def generar_visualizaciones_avanzadas(caso): # temp_dir ya no es necesario aquí para guardar imágenes
+    """Genera los gráficos y devuelve sus representaciones JSON."""
     perspectivas_data = caso.perspectivas
     labels = ["Autonomía", "Beneficencia", "No Maleficencia", "Justicia"]
     
@@ -165,21 +173,21 @@ def generar_visualizaciones_avanzadas(caso, temp_dir):
     for key, data in perspectivas_data.items():
         fig_radar.add_trace(go.Scatterpolar(r=list(data.values()), theta=labels, fill='toself', name=nombres[key], line_color=colors_map[key]))
     fig_radar.update_layout(title="Ponderación de Principios por Perspectiva", polar=dict(radialaxis=dict(visible=True, range=[0, 5])), showlegend=True, font_size=14)
-    radar_path = os.path.join(temp_dir, "radar_comparativo.png")
-    fig_radar.write_image(radar_path)
     
     # Gráfico de Consenso y Disenso
     scores = np.array([list(d.values()) for d in perspectivas_data.values()])
     fig_stats = go.Figure()
     fig_stats.add_trace(go.Bar(x=labels, y=np.mean(scores, axis=0), error_y=dict(type='data', array=np.std(scores, axis=0), visible=True), marker_color='#636EFA'))
     fig_stats.update_layout(title="Análisis de Consenso y Disenso", yaxis=dict(range=[0, 6]), font_size=14)
-    stats_path = os.path.join(temp_dir, "estadisticas.png")
-    fig_stats.write_image(stats_path)
     
-    return {'radar_comparativo': radar_path, 'estadisticas': stats_path}
+    # Devolver figuras como cadenas JSON
+    return {
+        'radar_comparativo_json': fig_radar.to_json(),
+        'estadisticas_json': fig_stats.to_json()
+    }
 
 def crear_reporte_pdf_completo(data, temp_dir, filename):
-    """Genera el reporte PDF usando los archivos del directorio temporal."""
+    """Genera el reporte PDF. Los gráficos ya no se incrustan directamente como imágenes estáticas generadas por Kaleido."""
     doc = SimpleDocTemplate(filename, pagesize=letter, topMargin=inch/2, bottomMargin=inch/2)
     styles = getSampleStyleSheet()
     story = []
@@ -200,22 +208,23 @@ def crear_reporte_pdf_completo(data, temp_dir, filename):
     if "AnalisisMultiperspectiva" in data:
         story.append(Paragraph("Análisis Multiperspectiva", h2))
         for nombre, valores in data["AnalisisMultiperspectiva"].items():
-            texto = f"<b>{nombre}:</b> Autonomía: {valores['autonomia']}, Beneficencia: {valores['beneficencia']}, No Maleficencia: {valores['no_maleficencia']}, Justicia: {valores['justicia']}"
+            texto = f"<b>{nombre}:</b> Autonomía: {valores.get('autonomia', 0)}, Beneficencia: {valores.get('beneficencia', 0)}, No Maleficencia: {valores.get('no_maleficencia', 0)}, Justicia: {valores.get('justicia', 0)}"
             story.append(Paragraph(texto, body))
     
     if data.get("Análisis Deliberativo (IA)"):
         story.append(Paragraph("Análisis Deliberativo (IA)", h2))
         story.append(Paragraph(data["Análisis Deliberativo (IA)"].replace('\n', '<br/>'), body))
 
-    # Añadir gráficos desde el directorio temporal
-    if temp_dir and os.path.exists(temp_dir):
-        story.append(PageBreak())
-        story.append(Paragraph("Visualizaciones de Datos", h1))
-        image_paths = [os.path.join(temp_dir, f) for f in sorted(os.listdir(temp_dir)) if f.endswith('.png')]
-        for img_path in image_paths:
-            if os.path.exists(img_path):
-                story.append(Image(img_path, width=7*inch, height=4.5*inch, hAlign='CENTER'))
-                story.append(Spacer(1, 0.5*inch))
+    # NOTA: Los gráficos interactivos de Plotly no se incrustan directamente como imágenes en el PDF
+    # sin un proceso de renderizado adicional que requeriría Kaleido o un servicio externo.
+    # Si se necesitan gráficos estáticos en el PDF, se debería considerar:
+    # 1. Usar una biblioteca de gráficos que genere directamente imágenes (ej. matplotlib).
+    # 2. Renderizar los gráficos de Plotly a imágenes en un servicio externo y luego incrustar esas imágenes.
+    # Por ahora, se omite la sección de gráficos en el PDF para evitar el error de Kaleido.
+    story.append(PageBreak())
+    story.append(Paragraph("Visualizaciones de Datos (Disponibles en la interfaz web interactiva)", h1))
+    story.append(Paragraph("Los gráficos de radar y consenso/disenso se muestran de forma interactiva en la aplicación web BIOETHICARE 360.", body))
+    story.append(Spacer(1, 0.5*inch))
             
     if data.get("Historial del Chat de Deliberación"):
         story.append(PageBreak())
@@ -277,65 +286,27 @@ def display_case_details(report_data, container=st):
         st.subheader(f"Dashboard del Caso: `{case_id}`", anchor=False)
         st.markdown("---")
         
-        # Regenerar imágenes para mostrar si no están ya disponibles en session_state.temp_dir
-        # Esta parte debe tener cuidado de no sobrescribir el temp_dir de la sesión activa
-        # si estamos viendo el caso *actual*.
-        display_temp_dir = None
-        if st.session_state.case_id == case_id and st.session_state.temp_dir and os.path.exists(st.session_state.temp_dir):
-            display_temp_dir = st.session_state.temp_dir
-        else: # Para casos históricos, o si temp_dir fue limpiado
-            # Reconstruir un objeto CasoBioetico a partir de report_data para generar gráficos
-            # Esto requiere mapear cuidadosamente report_data de nuevo a los argumentos del constructor de CasoBioetico
-            # Extraer datos para el constructor de CasoBioetico
-            patient_summary = report_data.get('Resumen del Paciente', '')
-            try:
-                p_name_match = patient_summary.split(',')[0].replace('Paciente ', '')
-                p_age_match = safe_int(patient_summary.split(',')[1].strip().split(' ')[0])
-                p_gender_match = patient_summary.split(',')[2].strip().split(' ')[0]
-                p_condition_match = patient_summary.split('condición ')[1].split('.')[0]
-                p_gestation_match = safe_int(patient_summary.split('Neonato de ')[1].split(' ')[0]) if 'Neonato de' in patient_summary else 0
-            except IndexError: # Manejar casos donde el resumen podría no ser analizado perfectamente
-                p_name_match, p_age_match, p_gender_match, p_condition_match, p_gestation_match = 'N/A', 0, 'N/A', 'N/A', 0
+        # Obtener los JSON de los gráficos directamente del reporte
+        radar_json = report_data.get('radar_chart_json')
+        stats_json = report_data.get('stats_chart_json')
 
-            # Acceso seguro a los datos de perspectivas
-            medico_persp = report_data.get('AnalisisMultiperspectiva', {}).get('Equipo Médico', {})
-            familia_persp = report_data.get('AnalisisMultiperspectiva', {}).get('Familia/Paciente', {})
-            comite_persp = report_data.get('AnalisisMultiperspectiva', {}).get('Comité de Bioética', {})
-
-            temp_caso_for_charts = CasoBioetico(
-                nombre_paciente=p_name_match,
-                historia_clinica=case_id,
-                edad=p_age_match,
-                genero=p_gender_match,
-                condicion=p_condition_match,
-                semanas_gestacion=p_gestation_match,
-                # Pasar los datos de perspectiva extraídos de forma segura
-                nivel_autonomia_medico=medico_persp.get('autonomia', 0),
-                nivel_beneficencia_medico=medico_persp.get('beneficencia', 0),
-                nivel_no_maleficencia_medico=medico_persp.get('no_maleficencia', 0),
-                nivel_justicia_medico=medico_persp.get('justicia', 0),
-                nivel_autonomia_familia=familia_persp.get('autonomia', 0),
-                nivel_beneficencia_familia=familia_persp.get('beneficencia', 0),
-                nivel_no_maleficencia_familia=familia_persp.get('no_maleficencia', 0),
-                nivel_justicia_familia=familia_persp.get('justicia', 0),
-                nivel_autonomia_comite=comite_persp.get('autonomia', 0),
-                nivel_beneficencia_comite=comite_persp.get('beneficencia', 0),
-                nivel_no_maleficencia_comite=comite_persp.get('no_maleficencia', 0),
-                nivel_justicia_comite=comite_persp.get('justicia', 0),
-            )
-            new_temp_dir = tempfile.mkdtemp()
-            generar_visualizaciones_avanzadas(temp_caso_for_charts, new_temp_dir)
-            display_temp_dir = new_temp_dir
-            # Nota: Este new_temp_dir no se almacena en el estado de la sesión, por lo que será limpiado por el SO más tarde.
-
-        if display_temp_dir and os.path.exists(display_temp_dir):
+        if radar_json and stats_json:
             st.markdown("##### Análisis Gráfico Avanzado")
             c1, c2 = st.columns(2)
-            radar_path = os.path.join(display_temp_dir, 'radar_comparativo.png')
-            stats_path = os.path.join(display_temp_dir, 'estadisticas.png')
-            if os.path.exists(radar_path): c1.image(radar_path, caption="Gráfico Comparativo de Perspectivas")
-            if os.path.exists(stats_path): c2.image(stats_path, caption="Análisis de Consenso vs. Disenso")
+            try:
+                fig_radar = pio.from_json(radar_json)
+                c1.plotly_chart(fig_radar, use_container_width=True)
+            except Exception as e:
+                c1.warning(f"Error al cargar gráfico de radar: {e}")
+            
+            try:
+                fig_stats = pio.from_json(stats_json)
+                c2.plotly_chart(fig_stats, use_container_width=True)
+            except Exception as e:
+                c2.warning(f"Error al cargar gráfico de estadísticas: {e}")
             st.markdown("---")
+        else:
+            st.info("No hay gráficos disponibles para este caso (posiblemente un caso antiguo o no se generaron con la nueva versión).")
 
         if report_data.get("Análisis Deliberativo (IA)"):
             st.markdown("##### Análisis Deliberativo por IA")
@@ -359,7 +330,9 @@ def display_case_details(report_data, container=st):
                 st.info(report_data["Análisis IA de Historia Clínica"])
             
             st.markdown("**Ponderación por Perspectiva**")
-            for nombre, valores in report_data.get("AnalisisMultiperspectiva", {}).items():
+            # Acceso seguro a los datos de perspectivas para la visualización
+            perspectivas_display = report_data.get("AnalisisMultiperspectiva", {})
+            for nombre, valores in perspectivas_display.items():
                 st.markdown(f"**{nombre}**")
                 p_cols = st.columns(4)
                 p_cols[0].metric("Autonomía", f"{valores.get('autonomia', 0)}/5")
@@ -521,13 +494,17 @@ with tab_analisis:
                         form_data_for_caso[f'nivel_{principle}_{p_name}'] = value
 
                 caso = CasoBioetico(**form_data_for_caso)
-                temp_dir = tempfile.mkdtemp()
-                generar_visualizaciones_avanzadas(caso, temp_dir)
                 
+                # Generar los JSON de los gráficos
+                chart_jsons = generar_visualizaciones_avanzadas(caso)
+
                 # Inicia el reporte y la sesión
                 st.session_state.chat_history = []
-                st.session_state.reporte = generar_reporte_completo(caso, st.session_state.dilema_sugerido, [])
+                st.session_state.reporte = generar_reporte_completo(caso, st.session_state.dilema_sugerido, [], chart_jsons) # Pasar chart_jsons
                 st.session_state.case_id = caso.historia_clinica
+                
+                # El temp_dir todavía se usa para el PDF, no para los gráficos
+                temp_dir = tempfile.mkdtemp()
                 st.session_state.temp_dir = temp_dir
                 
                 if db:
@@ -565,6 +542,7 @@ with tab_analisis:
                     if db: db.collection('casos_bioeticare360').document(st.session_state.case_id).update({"Análisis Deliberativo (IA)": analysis})
                     st.rerun()
             
+        # Generar el PDF usando el temp_dir de la sesión
         pdf_path = os.path.join(st.session_state.temp_dir, f"Reporte_{st.session_state.case_id}.pdf")
         crear_reporte_pdf_completo(st.session_state.reporte, st.session_state.temp_dir, pdf_path)
         with open(pdf_path, "rb") as pdf_file:
