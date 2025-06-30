@@ -74,7 +74,7 @@ def initialize_firebase():
             cred = credentials.Certificate(creds_dict)
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
-            st.success("Conexión con Firebase establecida.", icon="🔌")
+            st.success("🔌 Conexión con Firebase establecida.", icon="🔌")
             return firestore.client()
         else:
             st.warning("⚠️ Credenciales de Firebase no encontradas en `st.secrets`. Asegúrate de que la clave 'firebase_credentials' esté configurada.", icon="⚠️")
@@ -260,12 +260,16 @@ def llamar_gemini(prompt, api_key):
 # --- Función de ayuda para los deslizadores ---
 def create_perspective_sliders(prefix, st_container):
     """Genera un conjunto de 4 deslizadores para una perspectiva dada."""
-    principles = ["Autonomía", "Beneficencia", "No Maleficencia", "Justicia"]
+    # Nombres a mostrar para los deslizadores
+    display_principles = ["Autonomía", "Beneficencia", "No Maleficencia", "Justicia"]
+    # Claves internas para que coincidan con lo que _extract_perspective espera (sin acento para autonomía)
+    internal_keys = ["autonomia", "beneficencia", "no_maleficencia", "justicia"]
+
     values = {}
     cols = st_container.columns(4)
-    for i, p in enumerate(principles):
-        # Usar una clave única para cada deslizador basada en el prefijo y el principio
-        values[p.lower().replace(" ", "_")] = cols[i].slider(p, 0, 5, 3, key=f"{prefix}_{p.lower().replace(' ', '_')}_slider")
+    for i, display_name in enumerate(display_principles):
+        internal_key = internal_keys[i]
+        values[internal_key] = cols[i].slider(display_name, 0, 5, 3, key=f"{prefix}_{internal_key}_slider")
     return values
 
 # --- 7. Interfaz de Usuario ---
@@ -299,15 +303,17 @@ def display_case_details(report_data, container=st):
             c1, c2 = st.columns(2)
             try:
                 fig_radar = pio.from_json(radar_json)
-                c1.plotly_chart(fig_radar, use_container_width=True)
+                # Añadir clave única para plotly_chart
+                c1.plotly_chart(fig_radar, use_container_width=True, key=f"radar_chart_{case_id}")
             except Exception as e:
-                c1.warning(f"Error al cargar gráfico de radar: {e}")
+                c1.warning(f"Error al cargar gráfico de radar para caso {case_id}: {e}")
             
             try:
                 fig_stats = pio.from_json(stats_json)
-                c2.plotly_chart(fig_stats, use_container_width=True)
+                # Añadir clave única para plotly_chart
+                c2.plotly_chart(fig_stats, use_container_width=True, key=f"stats_chart_{case_id}")
             except Exception as e:
-                c2.warning(f"Error al cargar gráfico de estadísticas: {e}")
+                c2.warning(f"Error al cargar gráfico de estadísticas para caso {case_id}: {e}")
             st.markdown("---")
         else:
             st.info("No hay gráficos disponibles para este caso (posiblemente un caso antiguo o no se generaron con la nueva versión).")
@@ -326,8 +332,9 @@ def display_case_details(report_data, container=st):
             col_b.markdown(f"**Dilema Sugerido por IA:** {report_data.get('Dilema Sugerido por IA')}")
             
         with st.expander("Ver Detalles Completos, Ponderación y Chat"):
-            st.text_area("Descripción:", value=report_data.get('Descripción Detallada del Caso',''), height=150, disabled=True, key=f"desc_{case_id}")
-            st.text_area("Contexto Sociocultural:", value=report_data.get('Contexto Sociocultural y Familiar',''), height=100, disabled=True, key=f"context_{case_id}")
+            # Asegurar claves únicas para text_areas dentro del expander
+            st.text_area("Descripción:", value=report_data.get('Descripción Detallada del Caso',''), height=150, disabled=True, key=f"details_desc_{case_id}")
+            st.text_area("Contexto Sociocultural:", value=report_data.get('Contexto Sociocultural y Familiar',''), height=100, disabled=True, key=f"details_context_{case_id}")
             
             if report_data.get("Análisis IA de Historia Clínica"): # Mostrar nuevo análisis de IA
                 st.markdown("**Análisis IA de Historia Clínica (Elementos Clave)**")
@@ -339,16 +346,18 @@ def display_case_details(report_data, container=st):
             for nombre, valores in perspectivas_display.items():
                 st.markdown(f"**{nombre}**")
                 p_cols = st.columns(4)
-                p_cols[0].metric("Autonomía", f"{valores.get('autonomia', 0)}/5")
-                p_cols[1].metric("Beneficencia", f"{valores.get('beneficencia', 0)}/5")
-                p_cols[2].metric("No Maleficencia", f"{valores.get('no_maleficencia', 0)}/5")
-                p_cols[3].metric("Justicia", f"{valores.get('justicia', 0)}/5")
+                # Asegurar claves únicas para las métricas también
+                p_cols[0].metric("Autonomía", f"{valores.get('autonomia', 0)}/5", key=f"metric_autonomia_{nombre}_{case_id}")
+                p_cols[1].metric("Beneficencia", f"{valores.get('beneficencia', 0)}/5", key=f"metric_beneficencia_{nombre}_{case_id}")
+                p_cols[2].metric("No Maleficencia", f"{valores.get('no_maleficencia', 0)}/5", key=f"metric_nomaleficencia_{nombre}_{case_id}")
+                p_cols[3].metric("Justicia", f"{valores.get('justicia', 0)}/5", key=f"metric_justicia_{nombre}_{case_id}")
             
             st.markdown("**Historial del Chat**")
             chat_history = report_data.get("Historial del Chat de Deliberación", [])
             if not chat_history:
                 st.write("No hay historial de chat para este caso.")
-            for msg in chat_history:
+            for i, msg in enumerate(chat_history):
+                # st.chat_message maneja su propia unicidad, pero si hubiera widgets interactivos dentro, necesitarían claves.
                 with st.chat_message(msg['role']): st.markdown(msg['content'])
 
 def cleanup_temp_dir():
@@ -597,8 +606,7 @@ with tab_chatbot:
 
         st.subheader("Historial del Chat", anchor=False)
         for msg in st.session_state.chat_history:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+            with st.chat_message(msg['role']): st.markdown(msg['content'])
 
 with tab_consultar:
     st.header("🔍 Consultar Casos Guardados", anchor=False)
@@ -609,7 +617,7 @@ with tab_consultar:
             casos = {caso.id: caso.to_dict() for caso in casos_ref}
             if not casos: st.info("No hay casos guardados.")
             else:
-                id_sel = st.selectbox("Selecciona un caso para ver sus detalles", options=list(casos.keys()))
+                id_sel = st.selectbox("Selecciona un caso para ver sus detalles", options=list(casos.keys()), key="case_selector_consultar") # Añadir clave única
                 if id_sel:  
                     display_case_details(casos[id_sel])
         except Exception as e:
