@@ -274,14 +274,18 @@ def display_case_details(report_data, key_prefix, container=st):
                 st.markdown("**Análisis IA de Historia Clínica (Elementos Clave)**")
                 st.info(report_data["Análisis IA de Historia Clínica"])
             
-            st.markdown("**Ponderación por Perspectiva**")
+            # --- SECCIÓN CORREGIDA ---
+            # El error 'TypeError' ocurría porque st.metric() esperaba un número, pero recibía un texto como "3/5".
+            # La solución es pasar el valor numérico directamente. La escala se puede indicar en el título de la sección.
+            st.markdown("**Ponderación por Perspectiva (escala 0-5)**")
             for nombre, valores in report_data.get("AnalisisMultiperspectiva", {}).items():
                 st.markdown(f"**{nombre}**")
                 p_cols = st.columns(4)
-                p_cols[0].metric("Autonomía", f"{valores.get('autonomia', 0)}/5", key=f"{key_prefix}_metric_aut_{nombre}_{case_id}")
-                p_cols[1].metric("Beneficencia", f"{valores.get('beneficencia', 0)}/5", key=f"{key_prefix}_metric_ben_{nombre}_{case_id}")
-                p_cols[2].metric("No Maleficencia", f"{valores.get('no_maleficencia', 0)}/5", key=f"{key_prefix}_metric_nom_{nombre}_{case_id}")
-                p_cols[3].metric("Justicia", f"{valores.get('justicia', 0)}/5", key=f"{key_prefix}_metric_jus_{nombre}_{case_id}")
+                p_cols[0].metric("Autonomía", valores.get('autonomia', 0), key=f"{key_prefix}_metric_aut_{nombre}_{case_id}")
+                p_cols[1].metric("Beneficencia", valores.get('beneficencia', 0), key=f"{key_prefix}_metric_ben_{nombre}_{case_id}")
+                p_cols[2].metric("No Maleficencia", valores.get('no_maleficencia', 0), key=f"{key_prefix}_metric_nom_{nombre}_{case_id}")
+                p_cols[3].metric("Justicia", valores.get('justicia', 0), key=f"{key_prefix}_metric_jus_{nombre}_{case_id}")
+            # --- FIN DE LA SECCIÓN CORREGIDA ---
             
             st.markdown("**Historial del Chat**")
             for msg in report_data.get("Historial del Chat de Deliberación", []):
