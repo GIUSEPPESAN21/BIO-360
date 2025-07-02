@@ -1,6 +1,6 @@
-# app.py - BIOETHICARE 360 - Versión Profesional Definitiva CORREGIDA
+# app.py - BIOETHICARE 360 v2.0 - Módulo Ético Integrado
 # Autores: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
-# VERSIÓN CON CORRECCIÓN DE ERRORES DE KEY, ANÁLISIS DE HISTORIA CLÍNICA Y ARQUITECTURA ROBUSTA
+# VERSIÓN CON MÓDULO DE VERIFICACIÓN ÉTICA Y GRÁFICO DE EQUILIBRIO
 
 # --- 1. Importaciones ---
 import os
@@ -13,14 +13,12 @@ import plotly.graph_objects as go
 import numpy as np
 import tempfile
 import shutil
-import plotly.io as pio # Para leer figuras desde JSON
+import plotly.io as pio
 import time
 import logging
 
 # Importaciones para PDF
-# --- CORRECCIÓN APLICADA AQUÍ ---
-# Se ha añadido 'PageBreak' a la lista de importaciones para solucionar el error 'NameError'.
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
@@ -54,29 +52,98 @@ for key, default_value in session_defaults.items():
     if key not in st.session_state:
         st.session_state[key] = default_value
 
-# --- 4. Funciones Utilitarias Mejoradas ---
+# --- 4. Funciones Utilitarias ---
 def safe_int(value, default=0):
-    """Convierte un valor a entero de forma segura."""
-    if value is None or value == '':
-        return default
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        return default
+    if value is None or value == '': return default
+    try: return int(value)
+    except (ValueError, TypeError): return default
 
 def safe_str(value, default=""):
-    """Convierte un valor a string de forma segura y limpia."""
-    if value is None:
-        return default
+    if value is None: return default
     return str(value).strip()
 
 def log_error(error_msg, exception=None):
-    """Registra errores de forma consistente."""
     logger.error(f"BIOETHICARE ERROR: {error_msg}")
-    if exception:
-        logger.error(f"Exception details: {str(exception)}")
+    if exception: logger.error(f"Exception details: {str(exception)}")
 
-# --- 5. Conexión con Firebase ---
+# --- 5. MÓDULO DE ANÁLISIS ÉTICO (NUEVA SECCIÓN) ---
+def verificar_sesgo_etico(caso):
+    """
+    Analiza las ponderaciones para detectar posibles sesgos o desequilibrios,
+    y devuelve advertencias, recomendaciones y un nivel de severidad.
+    """
+    advertencias = []
+    recomendaciones = []
+    puntos_severidad = 0
+
+    for nombre, valores in caso.perspectivas.items():
+        if sum(valores.values()) == 0:
+            advertencias.append(f"**Perspectiva Omitida:** La perspectiva de '{nombre}' no asignó puntuación a ningún principio.")
+            recomendaciones.append(f"Se recomienda verificar si la ponderación de '{nombre}' fue omitida accidentalmente para asegurar una deliberación completa.")
+            puntos_severidad += 3
+
+        for principio, valor in valores.items():
+            if valor == 0:
+                advertencias.append(f"**Principio Omitido en '{nombre.title()}':** El principio de '{principio.replace('_', ' ').capitalize()}' tiene un valor de 0.")
+                recomendaciones.append(f"Evaluar si la omisión del principio de '{principio.replace('_', ' ').capitalize()}' en la perspectiva de '{nombre.title()}' es intencional y justificada.")
+                puntos_severidad += 1
+
+        if sum(valores.values()) > 0:
+            max_diff = max(valores.values()) - min(valores.values())
+            if max_diff >= 4:
+                advertencias.append(f"**Alto Desequilibrio Interno:** En la perspectiva de '{nombre.title()}', existe un alto desequilibrio entre los principios (diferencia de {max_diff} puntos).")
+                recomendaciones.append("Se sugiere revisar si la alta disparidad en la ponderación de esta perspectiva está suficientemente justificada o si requiere una deliberación más balanceada.")
+                puntos_severidad += 2
+
+    puntajes_totales = {nombre: sum(valores.values()) for nombre, valores in caso.perspectivas.items()}
+    if len(puntajes_totales) > 1:
+        max_perspectiva = max(puntajes_totales, key=puntajes_totales.get)
+        min_perspectiva = min(puntajes_totales, key=puntajes_totales.get)
+        if puntajes_totales[max_perspectiva] - puntajes_totales[min_perspectiva] >= 8:
+            advertencias.append(f"**Alto Desequilibrio Externo:** La perspectiva de '{max_perspectiva.title()}' tiene un peso total significativamente mayor que la de '{min_perspectiva.title()}'.")
+            recomendaciones.append("Analizar si esta dominancia de una perspectiva sobre otra es adecuada para el caso o si es necesario re-equilibrar las ponderaciones para una decisión más equitativa.")
+            puntos_severidad += 2
+
+    if puntos_severidad >= 5:
+        severidad = "Crítico"
+    elif puntos_severidad >= 2:
+        severidad = "Moderado"
+    else:
+        severidad = "Bajo"
+        
+    return advertencias, recomendaciones, severidad
+
+def generar_grafico_equilibrio_etico(caso):
+    """Genera un gráfico de barras agrupadas para comparar directamente los principios entre perspectivas."""
+    try:
+        fig = go.Figure()
+        colores = {"medico": "#EF4444", "familia": "#3B82F6", "comite": "#22C55E"}
+        nombres_perspectivas = {'medico': 'Equipo Médico', 'familia': 'Familia/Paciente', 'comite': 'Comité de Bioética'}
+        
+        for nombre_corto, valores in caso.perspectivas.items():
+            nombre_largo = nombres_perspectivas.get(nombre_corto, nombre_corto.capitalize())
+            fig.add_trace(go.Bar(
+                x=["Autonomía", "Beneficencia", "No Maleficencia", "Justicia"],
+                y=list(valores.values()),
+                name=nombre_largo,
+                marker_color=colores[nombre_corto]
+            ))
+        fig.update_layout(
+            title_text="<b>Análisis Comparativo de Principios</b>",
+            barmode="group",
+            yaxis=dict(title="Puntaje Asignado", range=[0, 5.5]),
+            legend_title_text="Perspectivas",
+            font_size=12,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font_color='#2E3A47'
+        )
+        return fig.to_json()
+    except Exception as e:
+        log_error("Error generando gráfico de equilibrio ético", e)
+        return None
+
+# --- 6. Conexión con Firebase ---
 @st.cache_resource
 def initialize_firebase():
     """Inicializa la conexión con Firebase de forma segura."""
@@ -98,7 +165,7 @@ def initialize_firebase():
 
 db = initialize_firebase()
 
-# --- 6. Base de Conocimiento ---
+# --- 7. Base de Conocimiento ---
 dilemas_opciones = {
     "Dilemas Éticos en Neonatología": {},
     "Limitación del Esfuerzo Terapéutico (Adultos/Pediatría)": {},
@@ -111,7 +178,7 @@ dilemas_opciones = {
     "Conflictos de Interés": {},
 }
 
-# --- 7. Clases de Modelo ---
+# --- 8. Clases de Modelo ---
 class CasoBioetico:
     """Modela los datos del caso con la estructura multiperspectiva."""
     def __init__(self, **kwargs):
@@ -134,7 +201,6 @@ class CasoBioetico:
         }
 
     def _extract_perspective(self, prefix, kwargs):
-        """Extrae y convierte de forma segura los valores de las perspectivas."""
         return {
             "autonomia": safe_int(kwargs.get(f'nivel_autonomia_{prefix}')),
             "beneficencia": safe_int(kwargs.get(f'nivel_beneficencia_{prefix}')),
@@ -142,9 +208,9 @@ class CasoBioetico:
             "justicia": safe_int(kwargs.get(f'nivel_justicia_{prefix}')),
         }
 
-# --- 8. Funciones de Generación de Reportes ---
-def generar_reporte_completo(caso, dilema_sugerido, chat_history, chart_jsons):
-    """Genera el diccionario del reporte, incluyendo los JSON de los gráficos."""
+# --- 9. Funciones de Generación de Reportes ---
+def generar_reporte_completo(caso, dilema_sugerido, chat_history, chart_jsons, ethical_analysis):
+    """Genera el diccionario del reporte, incluyendo los JSON de los gráficos y el análisis ético."""
     resumen_paciente = f"Paciente {caso.nombre_paciente}, {caso.edad} años, género {caso.genero}, condición {caso.condicion}."
     if caso.semanas_gestacion > 0:
         resumen_paciente += f" Neonato de {caso.semanas_gestacion} sem."
@@ -165,10 +231,12 @@ def generar_reporte_completo(caso, dilema_sugerido, chat_history, chart_jsons):
             "Familia/Paciente": caso.perspectivas["familia"],
             "Comité de Bioética": caso.perspectivas["comite"],
         },
+        "AnalisisEtico": ethical_analysis,
         "Análisis Deliberativo (IA)": "",
         "Historial del Chat de Deliberación": chat_history,
         "radar_chart_json": chart_jsons.get('radar_comparativo_json'),
-        "stats_chart_json": chart_jsons.get('estadisticas_json'),
+        "stats_chart_json": chart_jsons.get('stats_chart_json'),
+        "equilibrio_chart_json": chart_jsons.get('equilibrio_chart_json'),
     }
 
 def generar_visualizaciones_avanzadas(caso):
@@ -184,12 +252,12 @@ def generar_visualizaciones_avanzadas(caso):
         for key, data in perspectivas_data.items():
             fig_radar.add_trace(go.Scatterpolar(r=list(data.values()), theta=labels, fill='toself', name=nombres[key], line_color=colors_map[key]))
         
-        fig_radar.update_layout(title="Ponderación por Perspectiva", polar=dict(radialaxis=dict(visible=True, range=[0, 5])), showlegend=True, font_size=14)
+        fig_radar.update_layout(title_text="<b>Ponderación por Perspectiva</b>", polar=dict(radialaxis=dict(visible=True, range=[0, 5])), showlegend=True, font_size=14)
         
         scores = np.array([list(d.values()) for d in perspectivas_data.values()])
         fig_stats = go.Figure()
         fig_stats.add_trace(go.Bar(x=labels, y=np.mean(scores, axis=0), error_y=dict(type='data', array=np.std(scores, axis=0), visible=True), marker_color='#636EFA'))
-        fig_stats.update_layout(title="Análisis de Consenso y Disenso", yaxis=dict(range=[0, 6]), font_size=14)
+        fig_stats.update_layout(title_text="<b>Análisis de Consenso y Disenso</b>", yaxis=dict(range=[0, 6]), font_size=14)
         
         return {'radar_comparativo_json': fig_radar.to_json(), 'estadisticas_json': fig_stats.to_json()}
     except Exception as e:
@@ -217,6 +285,14 @@ def crear_reporte_pdf_completo(data, filename):
                 story.append(Paragraph(key, h2))
                 story.append(Paragraph(safe_str(data[key]).replace('\n', '<br/>'), body))
 
+        if "AnalisisEtico" in data:
+            story.append(Paragraph("Análisis de Coherencia Ética", h2))
+            analisis = data["AnalisisEtico"]
+            story.append(Paragraph(f"<b>Nivel de Severidad:</b> {analisis.get('severidad', 'N/A')}", body))
+            for adv in analisis.get("advertencias", []):
+                story.append(Paragraph(f"<li>{adv}</li>", body))
+            story.append(Paragraph(f"<b>Recomendaciones:</b> {' '.join(analisis.get('recomendaciones', []))}", body))
+
         if "AnalisisMultiperspectiva" in data:
             story.append(Paragraph("Análisis Multiperspectiva", h2))
             for nombre, valores in data["AnalisisMultiperspectiva"].items():
@@ -235,19 +311,17 @@ def crear_reporte_pdf_completo(data, filename):
             story.append(PageBreak())
             story.append(Paragraph("Historial del Chat de Deliberación", h1))
             for msg in data["Historial del Chat de Deliberación"]:
-                role_text = f"<b>{safe_str(msg.get('role', 'unknown')).capitalize()}:</b> {safe_str(msg.get('content'))}"
+                role_text = f"<b>{safe_str(msg.get('role'), 'unknown')).capitalize()}:</b> {safe_str(msg.get('content'))}"
                 story.append(Paragraph(role_text, chat_style))
 
         doc.build(story)
         logger.info(f"PDF generado exitosamente: {filename}")
     except Exception as e:
         log_error(f"Error generando PDF {filename}", e)
-        # Es importante relanzar la excepción o manejarla para que el código posterior no falle
         raise e
 
-# --- 9. Función para llamar a Gemini API ---
+# --- 10. Función para llamar a Gemini API ---
 def llamar_gemini(prompt, api_key):
-    """Llamada robusta a Gemini con manejo de errores."""
     api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
     payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
@@ -272,7 +346,7 @@ def llamar_gemini(prompt, api_key):
         st.error(f"Ocurrió un error inesperado al contactar a la IA: {e}")
         return "Error inesperado."
 
-# --- 10. Funciones de UI ---
+# --- 11. Funciones de UI ---
 def display_case_details(report_data, key_prefix):
     """Muestra el dashboard del caso con la UI avanzada y llaves únicas y robustas."""
     try:
@@ -281,28 +355,59 @@ def display_case_details(report_data, key_prefix):
 
         st.subheader(f"Dashboard del Caso: `{case_id}`", anchor=False)
         st.markdown("---")
-        
-        # Visualizaciones
-        radar_json = report_data.get('radar_chart_json')
-        stats_json = report_data.get('stats_chart_json')
-        if radar_json and stats_json:
-            st.markdown("##### Análisis Gráfico Avanzado")
-            c1, c2 = st.columns(2)
-            try:
-                c1.plotly_chart(pio.from_json(radar_json), use_container_width=True, key=f"{key_prefix}_radar_{sanitized_id}")
-                c2.plotly_chart(pio.from_json(stats_json), use_container_width=True, key=f"{key_prefix}_stats_{sanitized_id}")
-            except Exception as e:
-                log_error(f"Error cargando gráficos para caso {case_id}", e)
-                st.warning(f"No se pudieron cargar los gráficos para el caso {case_id}.")
-            st.markdown("---")
 
-        # Análisis deliberativo
+        analisis_etico = report_data.get("AnalisisEtico", {})
+        if analisis_etico:
+            severidad = analisis_etico.get("severidad", "Bajo")
+            advertencias = analisis_etico.get("advertencias", [])
+            
+            color_map = {"Bajo": "#28a745", "Moderado": "#ffc107", "Crítico": "#dc3545"}
+            color = color_map.get(severidad, "#6c757d")
+            
+            st.markdown(f"<h5>Análisis de Coherencia Ética: <span style='color:white; background-color:{color}; padding: 5px 10px; border-radius: 5px;'>{severidad}</span></h5>", unsafe_allow_html=True)
+
+            if advertencias:
+                with st.expander("Ver detalles y recomendaciones del análisis ético", expanded=(severidad != "Bajo")):
+                    for adv in advertencias:
+                        st.warning(adv)
+                    st.info(f"**Recomendaciones:** {' '.join(analisis_etico.get('recomendaciones', []))}")
+            else:
+                st.success("El análisis no encontró desequilibrios éticos significativos en las ponderaciones.")
+            st.markdown("---")
+        
+        st.markdown("##### Visualizaciones del Caso")
+        tab_v1, tab_v2 = st.tabs(["Análisis de Perspectivas", "Análisis Comparativo de Principios"])
+
+        with tab_v1:
+            radar_json = report_data.get('radar_chart_json')
+            stats_json = report_data.get('stats_chart_json')
+            if radar_json and stats_json:
+                c1, c2 = st.columns(2)
+                try:
+                    c1.plotly_chart(pio.from_json(radar_json), use_container_width=True, key=f"{key_prefix}_radar_{sanitized_id}")
+                    c2.plotly_chart(pio.from_json(stats_json), use_container_width=True, key=f"{key_prefix}_stats_{sanitized_id}")
+                except Exception as e:
+                    log_error(f"Error cargando gráficos de perspectivas para caso {case_id}", e)
+                    st.warning(f"No se pudieron cargar los gráficos de perspectivas para el caso {case_id}.")
+        
+        with tab_v2:
+            equilibrio_json = report_data.get('equilibrio_chart_json')
+            if equilibrio_json:
+                try:
+                    st.plotly_chart(pio.from_json(equilibrio_json), use_container_width=True, key=f"{key_prefix}_equilibrio_{sanitized_id}")
+                except Exception as e:
+                    log_error(f"Error cargando gráfico de equilibrio para caso {case_id}", e)
+                    st.warning(f"No se pudo cargar el gráfico de equilibrio para el caso {case_id}.")
+            else:
+                st.info("Gráfico de equilibrio no disponible.")
+        
+        st.markdown("---")
+
         if report_data.get("Análisis Deliberativo (IA)"):
             st.markdown("##### Análisis Deliberativo por IA")
             st.info(report_data["Análisis Deliberativo (IA)"])
             st.markdown("---")
 
-        # Resumen del caso
         st.markdown("##### Resumen y Contexto del Caso")
         col_a, col_b = st.columns(2)
         col_a.markdown(f"**Paciente:** {safe_str(report_data.get('Resumen del Paciente'))}")
@@ -311,7 +416,6 @@ def display_case_details(report_data, key_prefix):
         if report_data.get("Dilema Sugerido por IA"):
             col_b.markdown(f"**Dilema Sugerido por IA:** {safe_str(report_data.get('Dilema Sugerido por IA'))}")
         
-        # Detalles expandibles
         with st.expander("Ver Detalles Completos, Ponderación y Chat"):
             st.text_area("Descripción:", value=safe_str(report_data.get('Descripción Detallada del Caso')), height=150, disabled=True, key=f"{key_prefix}_desc_{sanitized_id}")
             st.text_area("Contexto Sociocultural:", value=safe_str(report_data.get('Contexto Sociocultural y Familiar')), height=100, disabled=True, key=f"{key_prefix}_context_{sanitized_id}")
@@ -320,7 +424,6 @@ def display_case_details(report_data, key_prefix):
                 st.markdown("**Análisis IA de Historia Clínica (Elementos Clave)**")
                 st.info(report_data["Análisis IA de Historia Clínica"])
             
-            # Ponderación multiperspectiva
             st.markdown("**Ponderación por Perspectiva (escala 0-5)**")
             multiperspectiva = report_data.get("AnalisisMultiperspectiva", {})
             
@@ -336,7 +439,6 @@ def display_case_details(report_data, key_prefix):
                             value = safe_int(valores.get(m_key, 0))
                             p_cols[i].metric(label, value)
             
-            # Historial del chat
             st.markdown("**Historial del Chat**")
             chat_history = report_data.get("Historial del Chat de Deliberación", [])
             if chat_history:
@@ -359,9 +461,9 @@ def cleanup_temp_dir():
         log_error("Error limpiando directorio temporal", e)
         st.session_state.temp_dir = tempfile.mkdtemp()
 
-# --- 11. Flujo Principal de la Aplicación ---
+# --- 12. Flujo Principal de la Aplicación ---
 def main():
-    st.title("BIOETHICARE 360 🏥")
+    st.title("BIOETHICARE 360 🏥 v2.0")
     with st.expander("Autores"):
         st.markdown("""
         - **Joseph Javier Sánchez Acuña**: Ingeniero Industrial, Experto en IA y tecnologías de vanguardia.
@@ -375,7 +477,6 @@ def main():
 
     tab_analisis, tab_chatbot, tab_consultar = st.tabs(["**Análisis de Caso**", "**Asistente de Bioética (Chatbot)**", "**Consultar Casos Anteriores**"])
 
-    # --- TAB 1: ANÁLISIS DE CASO ---
     with tab_analisis:
         st.header("1. Asistente de Análisis Previo (Opcional)", anchor=False)
         st.text_area("Pega aquí la historia clínica del paciente...", key="clinical_history_input", height=250)
@@ -449,9 +550,15 @@ def main():
                         'nivel_no_maleficencia_comite': nivel_no_maleficencia_comite, 'nivel_justicia_comite': nivel_justicia_comite,
                     }
                     caso = CasoBioetico(**form_data)
+                    
                     chart_jsons = generar_visualizaciones_avanzadas(caso)
+                    chart_jsons['equilibrio_chart_json'] = generar_grafico_equilibrio_etico(caso)
+                    
+                    adv, rec, sev = verificar_sesgo_etico(caso)
+                    analisis_etico = {"advertencias": adv, "recomendaciones": rec, "severidad": sev}
+
                     st.session_state.chat_history = []
-                    st.session_state.reporte = generar_reporte_completo(caso, st.session_state.dilema_sugerido, [], chart_jsons)
+                    st.session_state.reporte = generar_reporte_completo(caso, st.session_state.dilema_sugerido, [], chart_jsons, analisis_etico)
                     st.session_state.case_id = caso.historia_clinica
                     
                     if db:
@@ -479,8 +586,6 @@ def main():
                             db.collection('casos_bioeticare360').document(st.session_state.case_id).update({"Análisis Deliberativo (IA)": analysis})
                         st.rerun()
             
-            # --- CORRECCIÓN APLICADA AQUÍ ---
-            # Se añade un bloque try-except para manejar el error de PDF y no detener la app.
             try:
                 pdf_path = os.path.join(st.session_state.temp_dir, f"Reporte_{safe_str(st.session_state.case_id, 'reporte')}.pdf")
                 crear_reporte_pdf_completo(st.session_state.reporte, pdf_path)
@@ -490,8 +595,6 @@ def main():
                 a2.error("Error al generar PDF.")
                 log_error("Error en la sección de descarga de PDF", e)
 
-
-    # --- TAB 2: CHATBOT ---
     with tab_chatbot:
         st.header("🤖 Asistente de Bioética con Gemini", anchor=False)
         if not st.session_state.case_id:
@@ -499,7 +602,6 @@ def main():
         else:
             st.info(f"Chatbot activo para el caso: **{st.session_state.case_id}**.")
             
-            # --- PREGUNTAS GUIADAS REINTEGRADAS ---
             st.subheader("Preguntas Guiadas para Deliberación", anchor=False)
             preguntas = [
                 "¿Cuál es el conflicto principal entre los principios bioéticos en este caso?",
@@ -516,7 +618,6 @@ def main():
             q_cols = st.columns(2)
             for i, q in enumerate(preguntas):
                 q_cols[i % 2].button(q, on_click=handle_q_click, args=(q,), use_container_width=True, key=f"q_{i}")
-            # --- FIN DE LA SECCIÓN REINTEGRADA ---
 
             if prompt := st.chat_input("Escribe tu pregunta...") or st.session_state.get('last_question'):
                 st.session_state.last_question = ""
@@ -541,7 +642,6 @@ def main():
                 with st.chat_message(safe_str(msg.get('role'), 'unknown')):
                     st.markdown(safe_str(msg.get('content')))
 
-    # --- TAB 3: CONSULTAR CASOS ---
     with tab_consultar:
         st.header("🔍 Consultar Casos Guardados", anchor=False)
         if not db:
