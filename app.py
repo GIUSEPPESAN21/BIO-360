@@ -1,6 +1,6 @@
-# app.py - BIOETHICARE 360 v2.0 - Módulo Ético Integrado
+# app.py - BIOETHICARE 360 v2.1 - Versión Final
 # Autores: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
-# VERSIÓN CON MÓDULO DE VERIFICACIÓN ÉTICA Y GRÁFICO DE EQUILIBRIO
+# VERSIÓN CON MÓDULO DE VERIFICACIÓN ÉTICA Y CORRECCIONES FINALES
 
 # --- 1. Importaciones ---
 import os
@@ -66,12 +66,8 @@ def log_error(error_msg, exception=None):
     logger.error(f"BIOETHICARE ERROR: {error_msg}")
     if exception: logger.error(f"Exception details: {str(exception)}")
 
-# --- 5. MÓDULO DE ANÁLISIS ÉTICO (NUEVA SECCIÓN) ---
+# --- 5. MÓDULO DE ANÁLISIS ÉTICO ---
 def verificar_sesgo_etico(caso):
-    """
-    Analiza las ponderaciones para detectar posibles sesgos o desequilibrios,
-    y devuelve advertencias, recomendaciones y un nivel de severidad.
-    """
     advertencias = []
     recomendaciones = []
     puntos_severidad = 0
@@ -114,7 +110,6 @@ def verificar_sesgo_etico(caso):
     return advertencias, recomendaciones, severidad
 
 def generar_grafico_equilibrio_etico(caso):
-    """Genera un gráfico de barras agrupadas para comparar directamente los principios entre perspectivas."""
     try:
         fig = go.Figure()
         colores = {"medico": "#EF4444", "familia": "#3B82F6", "comite": "#22C55E"}
@@ -311,7 +306,9 @@ def crear_reporte_pdf_completo(data, filename):
             story.append(PageBreak())
             story.append(Paragraph("Historial del Chat de Deliberación", h1))
             for msg in data["Historial del Chat de Deliberación"]:
-                role_text = f"<b>{safe_str(msg.get('role'), 'unknown')).capitalize()}:</b> {safe_str(msg.get('content'))}"
+                # --- CORRECCIÓN APLICADA AQUÍ ---
+                # Se eliminó el paréntesis extra que causaba el SyntaxError.
+                role_text = f"<b>{safe_str(msg.get('role', 'unknown')).capitalize()}:</b> {safe_str(msg.get('content'))}"
                 story.append(Paragraph(role_text, chat_style))
 
         doc.build(story)
