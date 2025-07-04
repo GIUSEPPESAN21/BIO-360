@@ -1,6 +1,5 @@
-# app.py - BIOETHICARE 360 v2.1 - Versión Final
+# app.py - BIOETHICARE 360 v2.0 - Versión Final
 # Autores: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
-# VERSIÓN CON MÓDULO DE VERIFICACIÓN ÉTICA Y CORRECCIONES FINALES
 
 # --- 1. Importaciones ---
 import os
@@ -607,6 +606,8 @@ def main():
                 "¿Qué cursos de acción alternativos no se han considerado todavía?",
                 "¿Cómo influyen los factores culturales o religiosos en la toma de decisiones?",
                 "Si priorizamos el principio de beneficencia, ¿cuál sería el curso de acción recomendado?"
+                "Analiza el caso a partir de las metodologías de Diego Gracia y Anderson Díaz Pérez (MIEC)?"
+                "¿Qué metodología sería la más adecuada para analizar el caso y brindame el propósito y el desarrollo del mismo?"
             ]
             
             def handle_q_click(q):
