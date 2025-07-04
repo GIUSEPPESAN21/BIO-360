@@ -1,4 +1,4 @@
-# app.py - BIOETHICARE 360 v2.2 - Chatbot Metodológico
+# BIOETHICARE 360 v2.0
 # Autores: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
 
 # --- 1. Importaciones ---
