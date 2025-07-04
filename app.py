@@ -457,10 +457,10 @@ def cleanup_temp_dir():
 
 # --- 12. Flujo Principal de la Aplicación ---
 def main():
-    st.title("BIOETHICARE 360 🏥 v2.0")
+    st.title("BIOETHICARE 360 🏥 2.0")
     with st.expander("Autores"):
         st.markdown("""
-        - **Joseph Javier Sánchez Acuña**: Ingeniero Industrial, Experto en IA y tecnologías de vanguardia.
+        - **Joseph Javier Sánchez Acuña**: Ingeniero Industrial, Experto en Inteligencia Artificial.
         - **Anderson Díaz Pérez**: Doctor en Bioética, Doctor en Salud Pública, Magíster en Ciencias Básicas Biomédicas (Énfasis en Inmunología), Especialista en Inteligencia Artificial.
         """)
     st.markdown("---")
