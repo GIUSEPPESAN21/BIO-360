@@ -1,5 +1,6 @@
-# app.py - BIOETHICARE 360 v2.0 - Versión Final
+# app.py - BIOETHICARE 360 v2.2 - Chatbot Metodológico
 # Autores: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
+# VERSIÓN CON PREGUNTAS METODOLÓGICAS INTEGRADAS EN EL CHATBOT
 
 # --- 1. Importaciones ---
 import os
@@ -305,8 +306,6 @@ def crear_reporte_pdf_completo(data, filename):
             story.append(PageBreak())
             story.append(Paragraph("Historial del Chat de Deliberación", h1))
             for msg in data["Historial del Chat de Deliberación"]:
-                # --- CORRECCIÓN APLICADA AQUÍ ---
-                # Se eliminó el paréntesis extra que causaba el SyntaxError.
                 role_text = f"<b>{safe_str(msg.get('role', 'unknown')).capitalize()}:</b> {safe_str(msg.get('content'))}"
                 story.append(Paragraph(role_text, chat_style))
 
@@ -605,9 +604,9 @@ def main():
                 "¿Qué estrategias de mediación se podrían usar entre el equipo médico y la familia?",
                 "¿Qué cursos de acción alternativos no se han considerado todavía?",
                 "¿Cómo influyen los factores culturales o religiosos en la toma de decisiones?",
-                "Si priorizamos el principio de beneficencia, ¿cuál sería el curso de acción recomendado?"
-                "Analiza el caso a partir de las metodologías de Diego Gracia y Anderson Díaz Pérez (MIEC)?"
-                "¿Qué metodología sería la más adecuada para analizar el caso y brindame el propósito y el desarrollo del mismo?"
+                "Si priorizamos el principio de beneficencia, ¿cuál sería el curso de acción recomendado?",
+                "Analiza el caso a partir de las metodologías de Diego Gracia y Anderson Díaz Pérez (MIEC).",
+                "¿Qué metodología sería la más adecuada para analizar el caso y brinda el propósito y el desarrollo del mismo?"
             ]
             
             def handle_q_click(q):
