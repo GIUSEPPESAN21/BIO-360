@@ -1,4 +1,4 @@
-# BIOETHICARE 360 v2.0
+# BIOETHICARE 360 2.0
 # Autores: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
 
 # --- 1. Importaciones ---
