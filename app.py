@@ -1,5 +1,6 @@
 # BIOETHICARE 360 2.0
 # Autores: Anderson Díaz Pérez & Joseph Javier Sánchez Acuña
+# Versión con mejoras de confidencialidad y consentimiento informado.
 
 # --- 1. Importaciones ---
 import os
@@ -203,7 +204,7 @@ class CasoBioetico:
         }
 
 # --- 9. Funciones de Generación de Reportes ---
-def generar_reporte_completo(caso, dilema_sugerido, chat_history, chart_jsons, ethical_analysis):
+def generar_reporte_completo(caso, dilema_sugerido, chat_history, chart_jsons, ethical_analysis, consentimiento_otorgado=False):
     """Genera el diccionario del reporte, incluyendo los JSON de los gráficos y el análisis ético."""
     resumen_paciente = f"Paciente {caso.nombre_paciente}, {caso.edad} años, género {caso.genero}, condición {caso.condicion}."
     if caso.semanas_gestacion > 0:
@@ -227,6 +228,7 @@ def generar_reporte_completo(caso, dilema_sugerido, chat_history, chart_jsons, e
         },
         "AnalisisEtico": ethical_analysis,
         "Análisis Deliberativo (IA)": "",
+        "Consentimiento Informado del Analista": "Aceptado" if consentimiento_otorgado else "No Registrado",
         "Historial del Chat de Deliberación": chat_history,
         "radar_chart_json": chart_jsons.get('radar_comparativo_json'),
         "stats_chart_json": chart_jsons.get('stats_chart_json'),
@@ -267,11 +269,21 @@ def crear_reporte_pdf_completo(data, filename):
         
         h1 = ParagraphStyle(name='H1', fontSize=18, fontName='Helvetica-Bold', alignment=TA_CENTER, spaceAfter=20)
         h2 = ParagraphStyle(name='H2', fontSize=14, fontName='Helvetica-Bold', spaceBefore=12, spaceAfter=6, textColor=colors.darkblue)
+        h3 = ParagraphStyle(name='H3', fontSize=12, fontName='Helvetica-Bold', spaceBefore=10, spaceAfter=4, textColor=colors.darkslategray)
         body = ParagraphStyle(name='Body', fontSize=10, fontName='Helvetica', leading=14, alignment=TA_JUSTIFY, spaceAfter=10)
         chat_style = ParagraphStyle(name='Chat', fontSize=9, fontName='Helvetica-Oblique', backColor=colors.whitesmoke, borderWidth=1, padding=5)
 
         story.append(Paragraph("Reporte Deliberativo - BIOETHICARE 360", h1))
         
+        # Declaración de confidencialidad en el PDF
+        if data.get("Consentimiento Informado del Analista") == "Aceptado":
+            story.append(Paragraph("Declaración de Confidencialidad", h3))
+            texto_consentimiento_pdf = """
+            Este análisis se realizó después de que el analista aceptara la política de confidencialidad y tratamiento de datos. 
+            El analista ha declarado haber anonimizado los datos personales sensibles conforme a la normativa vigente en Colombia (Ley 1581 de 2012 y Ley 23 de 1981).
+            """
+            story.append(Paragraph(texto_consentimiento_pdf, body))
+
         order = ["ID del Caso", "Fecha Análisis", "Analista", "Resumen del Paciente", "Dilema Ético Principal (Seleccionado)", "Dilema Sugerido por IA", "Descripción Detallada del Caso", "Contexto Sociocultural y Familiar", "Puntos Clave para Deliberación IA", "Análisis IA de Historia Clínica"]
         
         for key in order:
@@ -524,11 +536,24 @@ def main():
                 nivel_no_maleficencia_comite = c[2].slider("No Maleficencia",0,5,3,key="nmc")
                 nivel_justicia_comite = c[3].slider("Justicia",0,5,3,key="jc")
             
+            # --- SECCIÓN DE CONFIDENCIALIDAD Y CONSENTIMIENTO ---
+            st.markdown("---")
+            st.markdown("#### **Política de Confidencialidad y Tratamiento de Datos**")
+            texto_confidencialidad = """
+            Al utilizar BIOETHICARE 360°, usted declara que ha **anonimizado todos los datos personales sensibles** del caso clínico (nombres, cédulas, etc.) antes de su ingreso. 
+            La información registrada será tratada bajo los más estrictos principios de **confidencialidad**, en concordancia con la **Ley 1581 de 2012 (Habeas Data)** y la **Ley 23 de 1981 (Ética Médica)** de Colombia. 
+            Los datos se utilizan exclusivamente para el propósito de la deliberación bioética facilitada por esta herramienta.
+            """
+            st.info(texto_confidencialidad)
+            acepta_terminos = st.checkbox("He leído, comprendido y acepto la política de confidencialidad y tratamiento de datos.", key="acepta_terminos")
+            
             submitted = st.form_submit_button("Analizar Caso y Generar Dashboard", use_container_width=True)
 
         if submitted:
             if not historia_clinica.strip():
                 st.error("El campo 'Nº Historia Clínica / ID del Caso' es obligatorio.")
+            elif not acepta_terminos:
+                st.error("Debe aceptar la política de confidencialidad para poder analizar el caso.")
             else:
                 with st.spinner("Procesando y generando reporte..."):
                     cleanup_temp_dir()
@@ -552,7 +577,7 @@ def main():
                     analisis_etico = {"advertencias": adv, "recomendaciones": rec, "severidad": sev}
 
                     st.session_state.chat_history = []
-                    st.session_state.reporte = generar_reporte_completo(caso, st.session_state.dilema_sugerido, [], chart_jsons, analisis_etico)
+                    st.session_state.reporte = generar_reporte_completo(caso, st.session_state.dilema_sugerido, [], chart_jsons, analisis_etico, consentimiento_otorgado=acepta_terminos)
                     st.session_state.case_id = caso.historia_clinica
                     
                     if db:
