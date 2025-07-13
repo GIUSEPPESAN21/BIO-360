@@ -6,3 +6,4 @@ reportlab
 firebase-admin
 requests
 kaleido
+Pyrebase4
