@@ -138,8 +138,11 @@ def generar_grafico_equilibrio_etico(caso):
 def initialize_firebase_admin():
     """Inicializa el SDK de ADMIN para operaciones de base de datos del backend."""
     try:
+        # Intenta obtener las credenciales desde los secrets de Streamlit
         if "firebase_credentials" in st.secrets:
             creds_dict = dict(st.secrets["firebase_credentials"])
+            # Asegura que la private_key tenga el formato correcto
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             cred = credentials.Certificate(creds_dict)
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
@@ -661,6 +664,7 @@ def display_main_app():
                 if not user_uid:
                     st.warning("No se puede obtener el ID de usuario para consultar casos.")
                 else:
+                    # --- MODIFICADO: Lee los casos de la subcolección del usuario ---
                     casos_ref = db.collection('usuarios').document(user_uid).collection('casos').stream()
                     casos = {caso.id: caso.to_dict() for caso in casos_ref}
                     if not casos:
