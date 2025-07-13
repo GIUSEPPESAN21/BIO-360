@@ -133,15 +133,12 @@ def generar_grafico_equilibrio_etico(caso):
         return None
 
 # --- 6. Conexión con Firebase ---
-# --- MODIFICADO: Dos funciones de inicialización separadas ---
 @st.cache_resource
 def initialize_firebase_admin():
     """Inicializa el SDK de ADMIN para operaciones de base de datos del backend."""
     try:
-        # Intenta obtener las credenciales desde los secrets de Streamlit
         if "firebase_credentials" in st.secrets:
             creds_dict = dict(st.secrets["firebase_credentials"])
-            # Asegura que la private_key tenga el formato correcto
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             cred = credentials.Certificate(creds_dict)
             if not firebase_admin._apps:
@@ -159,8 +156,14 @@ def initialize_firebase_admin():
 def initialize_firebase_auth():
     """Inicializa el SDK de CLIENTE para autenticación de usuarios."""
     try:
+        # La forma correcta y segura es leer desde los secrets.
         if "firebase_client_config" in st.secrets:
             firebase_client_config = dict(st.secrets["firebase_client_config"])
+            # Asegurarse de que el apiKey no sea un valor de ejemplo.
+            if "TU_API_KEY" in firebase_client_config.get("apiKey", ""):
+                 log_error("La clave de API en secrets.toml parece ser un valor de ejemplo.")
+                 st.error("Error de configuración: Por favor, verifica que la sección [firebase_client_config] en tu archivo secrets.toml contenga las credenciales reales.")
+                 return None
             return pyrebase.initialize_app(firebase_client_config)
         else:
             log_error("Configuración de cliente de Firebase (firebase_client_config) no encontrada en st.secrets.")
