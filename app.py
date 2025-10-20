@@ -293,11 +293,11 @@ def crear_reporte_pdf_completo(data, filename):
         raise e
 
 # --- 10. Función para llamar a Gemini API (MODIFICADO) ---
-def _get_available_model(self):
+def llamar_gemini(prompt, api_key):
     """
-    Intenta inicializar el mejor modelo de Gemini disponible de la lista proporcionada.
+    Intenta llamar a la API de Gemini usando una lista priorizada de modelos.
     """
-    # Lista de modelos priorizada, AHORA INCLUYE el modelo experimental.
+    # Lista de modelos priorizada, del más nuevo/experimental al más estable.
     model_candidates = [
         "gemini-2.0-flash-exp",      # Modelo experimental más reciente (prioridad 1)
         "gemini-1.5-flash-latest",   # Versión más reciente y rápida de 1.5
@@ -306,28 +306,31 @@ def _get_available_model(self):
         "gemini-1.5-pro",            # Modelo Pro básico
     ]
 
-def llamar_gemini(prompt, api_key):
-    # Se actualiza al modelo más reciente y potente
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key={api_key}"
-    headers = {"Content-Type": "application/json"}
-    payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
-    try:
-        response = requests.post(api_url, headers=headers, json=payload, timeout=90)
-        response.raise_for_status()
-        result = response.json()
-        if 'candidates' in result and result['candidates']:
-            return result['candidates'][0]['content']['parts'][0]['text']
-        log_error(f"Respuesta inesperada de la API de Gemini: {result}")
-        st.warning("Respuesta inesperada de la API.")
-        return "No se pudo obtener una respuesta válida."
-    except requests.exceptions.RequestException as e:
-        log_error("Error de conexión con Gemini", e)
-        st.error(f"Error de conexión con la API de Gemini: {e}")
-        return "Error de conexión."
-    except Exception as e:
-        log_error("Error inesperado en llamada a Gemini", e)
-        st.error(f"Ocurrió un error inesperado al contactar a la IA: {e}")
-        return "Error inesperado."
+    for model_name in model_candidates:
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+        headers = {"Content-Type": "application/json"}
+        payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+        
+        try:
+            response = requests.post(api_url, headers=headers, json=payload, timeout=90)
+            response.raise_for_status()  # Lanza una excepción para errores HTTP (4xx o 5xx)
+            result = response.json()
+
+            if 'candidates' in result and result['candidates']:
+                logger.info(f"Respuesta obtenida exitosamente con el modelo: {model_name}")
+                return result['candidates'][0]['content']['parts'][0]['text']
+            else:
+                logger.warning(f"El modelo {model_name} devolvió una respuesta válida pero vacía: {result}. Intentando con el siguiente.")
+        
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Fallo al usar el modelo {model_name}: {e}. Intentando con el siguiente modelo de la lista.")
+            continue # Pasa al siguiente modelo
+    
+    # Si el bucle termina sin éxito
+    log_error("Todos los modelos de la lista fallaron al ser contactados.")
+    st.error("No se pudo contactar con ninguno de los modelos de IA disponibles. Por favor, verifique la clave de API y la conexión.")
+    return "Error: No se pudo obtener una respuesta de la IA después de intentar con varios modelos."
+
 
 # --- 11. Funciones de UI (Sin Cambios en display_case_details) ---
 def display_case_details(report_data, key_prefix):
