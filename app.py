@@ -292,9 +292,23 @@ def crear_reporte_pdf_completo(data, filename):
         log_error(f"Error generando PDF {filename}", e)
         raise e
 
-# --- 10. Función para llamar a Gemini API (Sin Cambios) ---
+# --- 10. Función para llamar a Gemini API (MODIFICADO) ---
+def _get_available_model(self):
+    """
+    Intenta inicializar el mejor modelo de Gemini disponible de la lista proporcionada.
+    """
+    # Lista de modelos priorizada, AHORA INCLUYE el modelo experimental.
+    model_candidates = [
+        "gemini-2.0-flash-exp",      # Modelo experimental más reciente (prioridad 1)
+        "gemini-1.5-flash-latest",   # Versión más reciente y rápida de 1.5
+        "gemini-1.5-pro-latest",     # Versión Pro más reciente de 1.5
+        "gemini-1.5-flash",          # Modelo Flash básico
+        "gemini-1.5-pro",            # Modelo Pro básico
+    ]
+
 def llamar_gemini(prompt, api_key):
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # Se actualiza al modelo más reciente y potente
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
     payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
     try:
@@ -691,3 +705,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
